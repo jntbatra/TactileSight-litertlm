@@ -1,12 +1,17 @@
-# Server core — enough to run the mock and openai backends tonight on any laptop.
+# TactileSight cloud VLM server — core deps (needed for every backend)
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
-pydantic==2.9.2
-requests==2.32.3
+python-multipart==0.0.9
 pillow==10.4.0
+httpx==0.27.2
+pytest==8.3.2
 
-# The qefficient backend additionally needs QEfficient + its deps, which install ONLY on a
-# Qualcomm Cloud AI 100 host (Cirrascale / AWS DL2q). Do not add it here — install it on the
-# instance per https://github.com/quic/efficient-transformers :
-#   pip install -U pip
-#   pip install QEfficient        # or: git clone + pip install -e .
+# --- backend: openai (llama.cpp / vLLM / any OpenAI-vision endpoint) ---
+# nothing extra needed, httpx above is enough.
+
+# --- backend: qefficient (Qualcomm Cloud AI 100 only) ---
+# Do NOT install these on the laptop tonight — they need the Qualcomm Apps SDK
+# on the actual Cloud AI 100 instance. Uncomment on that box only:
+# git+https://github.com/quic/efficient-transformers.git
+# transformers==4.44.2
+# torch==2.3.1
