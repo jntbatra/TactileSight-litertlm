@@ -1,0 +1,88 @@
+{
+  "depth_intrinsics": {
+    "fx": 579.55126953125,
+    "fy": 579.55126953125,
+    "cx": 317.87152099609375,
+    "cy": 243.05596923828125,
+    "width": 640,
+    "height": 480,
+    "source": "get_camera_param() native 640x480"
+  },
+  "depth_distortion": {
+    "k1": -0.0984378457069397,
+    "k2": 0.24404765665531158,
+    "k3": -0.1764916181564331,
+    "k4": 0.0,
+    "k5": 0.0,
+    "k6": 0.0,
+    "p1": -0.006817973684519529,
+    "p2": 0.0007131294114515185
+  },
+  "color_intrinsics_640x480": {
+    "fx": 545.4067993164062,
+    "fy": 545.4067993164062,
+    "cx": 317.70098876953125,
+    "cy": 242.8679656982422,
+    "width": 640,
+    "height": 480,
+    "source": "get_camera_param() native 640x480 (ground truth)"
+  },
+  "color_intrinsics_1280x720": {
+    "fx": 1090.8135986328125,
+    "fy": 818.1101989746094,
+    "cx": 635.4019775390625,
+    "cy": 364.3019485473633,
+    "width": 1280,
+    "height": 720,
+    "source": "scaled from 640x480 (approximate \u2014 aspect ratio changes from 4:3 to 16:9)",
+    "warning": "fy scaled by 1.5x while fx scaled by 2x due to aspect ratio change. For accurate values, do OpenCV checkerboard calibration at 1280x720."
+  },
+  "color_distortion": {
+    "k1": 0.09684808552265167,
+    "k2": -0.14418108761310577,
+    "k3": -0.0411667600274086,
+    "k4": 0.0,
+    "k5": 0.0,
+    "k6": 0.0,
+    "p1": -0.0073297349736094475,
+    "p2": 0.00012188309483462945
+  },
+  "depth_to_color_extrinsics": {
+    "rotation": [
+      [
+        0.9999767541885376,
+        0.0065337964333593845,
+        0.001955561339855194
+      ],
+      [
+        -0.006519540678709745,
+        0.9999527335166931,
+        -0.007209670729935169
+      ],
+      [
+        -0.002002575434744358,
+        0.00719675375148654,
+        0.9999721050262451
+      ]
+    ],
+    "translation_mm": [
+      -24.888427734375,
+      0.3273433744907379,
+      -2.9241528511047363
+    ],
+    "source": "get_camera_param().transform"
+  },
+  "camera_info": {
+    "model": "Astra Pro Plus",
+    "serial": "ACR3B3300AZ",
+    "firmware": "RD2510",
+    "sdk_version": "v1.10.16",
+    "pid": "0x060f"
+  },
+  "notes": {
+    "depth_units": "millimetres (uint16)",
+    "fov_mismatch": "RGB 1280x720 is 16:9, depth 640x480 is 4:3. Depth covers only the central vertical region of the RGB frame.",
+    "ir_alignment": "IR sensor shares the same optics as depth \u2014 same 640x480 grid, pixel-aligned with depth.",
+    "baseline": "Translation X = -24.9mm matches the physical offset between RGB and depth/IR sensor housings."
+  }
+}

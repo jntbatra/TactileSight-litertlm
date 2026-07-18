@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/surface"
+    android:paddingHorizontal="24dp"
+    android:paddingTop="32dp"
+    android:paddingBottom="24dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/app_name"
+        android:textColor="@color/on_surface"
+        android:textSize="28sp"
+        android:letterSpacing="-0.02" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:layout_marginBottom="28dp"
+        android:text="@string/subtitle"
+        android:textColor="@color/on_surface_muted"
+        android:textSize="14sp" />
+
+    <TextView
+        style="@style/TextAppearance.TactileSight.Label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/label_source" />
+
+    <Spinner
+        android:id="@+id/sourceSpinner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="20dp" />
+
+    <TextView
+        style="@style/TextAppearance.TactileSight.Label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/label_capture" />
+
+    <Spinner
+        android:id="@+id/sceneSpinner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="20dp" />
+
+    <!-- The triplet, so it is obvious this is real band data and not a photo. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal"
+        android:background="@drawable/bg_card"
+        android:padding="12dp"
+        android:baselineAligned="false">
+
+        <ImageView
+            android:id="@+id/rgbPreview"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="2"
+            android:scaleType="centerCrop"
+            android:contentDescription="@string/preview_rgb" />
+
+        <ImageView
+            android:id="@+id/irPreview"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:scaleType="centerCrop"
+            android:contentDescription="@string/preview_ir" />
+
+        <ImageView
+            android:id="@+id/depthPreview"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:scaleType="centerCrop"
+            android:contentDescription="@string/preview_depth" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:minLines="2"
+        android:text="@string/status_ready"
+        android:textColor="@color/on_surface"
+        android:textSize="16sp" />
+
+    <!-- Band button 1. Full-width and tall: findable by touch alone. -->
+    <Button
+        android:id="@+id/describeButton"
+        style="@style/Widget.TactileSight.PrimaryButton"
+        android:layout_width="match_parent"
+        android:layout_height="72dp"
+        android:layout_marginTop="16dp"
+        android:text="@string/describe"
+        android:contentDescription="@string/describe_content_description" />
+
+</LinearLayout>
