@@ -156,3 +156,20 @@ They ship in the APK so the **whole pipeline runs with no band hardware** — th
 | [`docs/adr/0010`–`0013`](docs/adr/) | the current architecture decisions |
 | `docs/adr/0001`–`0009` | earlier decisions; several superseded — check the header note on each |
 | `server/` | the cloud tier (contract above) |
+
+### GenieX version is load-bearing — keep it current
+
+We were pinned to `0.3.1` while `0.3.12` was out, and that one number was the difference between "Qwen3-VL cannot run on the NPU" and a working NPU path. `0.3.1`'s QAIRT plugin exports only `qwen2_5_vl`; `0.3.12` adds `geniex::qwen3_vl::makeModel`. Same bundle, same device, same code — only the SDK changed.
+
+Measured on one capture, 2026-07-18 (#2):
+
+| | QAIRT / NPU (Qwen3-VL-4B) | llama_cpp / GPU (Gemma-4-E4B) |
+|---|---|---|
+| model load (once) | 6.7–7.2 s | 26.9 s |
+| TTFT | 260 ms | 3417 ms |
+| prefill | 1287 tok/s | 93 tok/s |
+| decode | 28 tok/s | 12–14 tok/s |
+
+The NPU run was also the more accurate of the two. `ModelConfig`'s 12-arg positional constructor is unchanged across the upgrade, so the bump is source-compatible.
+
+**AI Hub's Gemma-4-E4B has no QAIRT bundle** — its `release_assets.json` lists only `geniex_llamacpp` (q4_0 GGUF, pointing at Google's repo). Gemma cannot reach the NPU this way; "supported on 8 Elite Gen 5" there means the GGUF runs, not that an NPU build exists.

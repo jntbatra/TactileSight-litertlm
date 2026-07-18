@@ -82,10 +82,17 @@ class TactileSightApp : Application() {
     private companion object {
         const val TAG = "TactileSightApp"
 
-        /** First engine with a bundle staged wins. */
+        /**
+         * First engine with a bundle staged wins — NPU before GPU.
+         *
+         * Measured on the same capture (2026-07-18, #2): QAIRT/NPU answers in
+         * 260 ms against llama_cpp/GPU's 3417 ms, and answers *better* — the
+         * GPU run placed a centre sign on the right and padded with "a central
+         * area". GGUF stays as the fallback for a device with no QAIRT bundle.
+         */
         val ENGINE_PREFERENCE = listOf(
-            ModelStore.Engine.GENIEX_GGUF,
             ModelStore.Engine.GENIEX,
+            ModelStore.Engine.GENIEX_GGUF,
         )
     }
 }

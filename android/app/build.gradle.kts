@@ -90,7 +90,7 @@ dependencies {
     // GenieX — Qualcomm's on-device LLM/VLM runtime. Carries both backends as
     // native libs: libgeniex_plugin_qairt.so (Hexagon NPU, via libQnnHtpV81.so
     // for 8 Elite Gen 5) and libgeniex_plugin_llama_cpp.so (GPU/CPU fallback).
-    implementation("com.qualcomm.qti:geniex-android:0.3.1")
+    implementation("com.qualcomm.qti:geniex-android:0.3.12")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
