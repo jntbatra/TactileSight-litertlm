@@ -1,0 +1,36 @@
+{
+  "scene_name": "scene_1",
+  "scene_id": "id017",
+  "timestamp": "2026-07-18T08:42:02.716634",
+  "camera": {
+    "model": "Astra Pro Plus",
+    "serial": "ACR3B3300AZ",
+    "firmware": "RD2510"
+  },
+  "streams": {
+    "rgb": {
+      "width": 1280,
+      "height": 720,
+      "format": "MJPG",
+      "file": "rgb.jpg"
+    },
+    "depth_raw": {
+      "width": 640,
+      "height": 480,
+      "format": "uint16_mm",
+      "file": "depth_raw.npy"
+    },
+    "depth_colorized": {
+      "width": 640,
+      "height": 480,
+      "format": "JET_colormap",
+      "file": "depth_colorized.jpg"
+    },
+    "ir": {
+      "width": 640,
+      "height": 480,
+      "format": "uint8_scaled",
+      "file": "ir.jpg"
+    }
+  }
+}

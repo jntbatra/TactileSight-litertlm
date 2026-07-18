@@ -29,14 +29,24 @@ Take one issue at a time, in a fresh context. Each is a **vertical slice**: when
 
 ### Android build
 
-The build is picky about the JDK — we lost time to this, so it's pinned in `local.properties` (gitignored, create your own):
+Create `android/local.properties` (gitignored) with the SDK path and your Sarvam key:
 
 ```properties
 sdk.dir=/path/to/Android/Sdk
-org.gradle.java.home=/path/to/android-studio/jbr   # JDK 21
+sarvam.api.key=<your key>
 ```
 
-**System JDK 25 will not work** — Gradle 8.x's Kotlin compiler throws `IllegalArgumentException: 25.0.3` parsing the version. Use Android Studio's bundled JBR (21). Without `sdk.dir` you get `SDK location not found`.
+**System JDK 25 will not work** — Gradle 8.x's Kotlin compiler throws `IllegalArgumentException: 25.0.3` parsing the version. Use Android Studio's bundled JBR (21), or any JDK 17–21.
+
+⚠️ **`org.gradle.java.home` does not belong in `local.properties`** — Gradle never reads that file (it's an Android-plugin convention for `sdk.dir` only), so putting it there silently does nothing and you still get `25.0.3`. This doc said otherwise until #1 hit the wall. Pick one that works:
+
+```bash
+JAVA_HOME=/path/to/android-studio/jbr ./gradlew assembleDebug   # per invocation
+```
+
+…or set `org.gradle.java.home` in **`~/.gradle/gradle.properties`** (your machine, outside the repo — note it applies to all your Gradle projects). Android Studio's own Gradle JDK setting also works and is per-project.
+
+Without `sdk.dir` you get `SDK location not found`.
 
 ### Models — sideloaded, not bundled, not downloaded
 

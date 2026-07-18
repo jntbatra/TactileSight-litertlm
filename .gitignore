@@ -25,3 +25,17 @@ tools/
 # OS / editor
 .DS_Store
 *.swp
+# code-review-graph — local index and local MCP wiring (paths are machine-specific)
+.code-review-graph/
+.mcp.json
+
+# Sideloaded VLM models, staged here off the removable drive so adb push runs
+# from fast local disk. Gigabytes, and this repo is public — never committed.
+models/
+*.litertlm
+*.pte
+
+# Local agent config from the code-review-graph install — machine-specific
+.claude/settings.json
+.claude/settings.json.bak
+.claude/skills/

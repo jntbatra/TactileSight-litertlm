@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TactileSight</string>
+    <string name="subtitle">Walking skeleton · bundled band captures</string>
+
+    <string name="label_source">Frame source</string>
+    <string name="label_capture">Capture</string>
+
+    <string name="describe">Describe</string>
+    <string name="describe_content_description">Describe what is in front of me</string>
+
+    <string name="stream_rgb">Colour · 1280×720</string>
+    <string name="stream_ir">Infrared · 640×480</string>
+    <string name="stream_depth">Depth · 640×480</string>
+
+    <string name="preview_rgb">Colour image from the band camera</string>
+    <string name="preview_ir">Infrared image from the band camera</string>
+    <string name="preview_depth">Depth image from the band camera</string>
+
+    <string name="status_ready">Ready. Press to describe the scene.</string>
+    <string name="status_press_to_capture">Ready. Press to capture from the band.</string>
+    <string name="status_working">Looking…</string>
+    <string name="status_speech_failed">Could not speak — check the network connection.</string>
+    <string name="status_no_key">No Sarvam API key. Add sarvam.api.key to android/local.properties.</string>
+    <string name="source_unavailable">%s is not built yet.</string>
+    <string name="capture_label">Capture %1$d of %2$d</string>
+</resources>
