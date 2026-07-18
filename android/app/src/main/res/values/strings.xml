@@ -10,6 +10,8 @@
     <string name="hint_endpoint">Server address, e.g. http://192.168.1.100:8000</string>
     <string name="hint_model">Model name, e.g. Llama-3.1-8B</string>
     <string name="label_language">Speak in</string>
+    <string name="check_server">Check server</string>
+    <string name="checking_server">Checking…</string>
     <string name="label_prompt">Prompt</string>
     <string name="hint_prompt">Prompt sent to the model</string>
     <string name="reset_prompt">Reset to default</string>

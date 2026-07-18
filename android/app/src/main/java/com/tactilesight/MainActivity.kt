@@ -19,6 +19,7 @@ import com.geniex.sdk.bean.RuntimeIdValue
 import com.tactilesight.brain.GenieXBrain
 import com.tactilesight.brain.ModelStore
 import com.tactilesight.brain.PromptBenchmark
+import com.tactilesight.brain.ServerCheck
 import com.tactilesight.brain.VlmPrompt
 import com.tactilesight.core.BrainMode
 import com.tactilesight.core.BrowsableFrameSource
@@ -188,6 +189,8 @@ class MainActivity : AppCompatActivity() {
             app.settings.customPrompt = if (typed.trim() == VlmPrompt.describe()) "" else typed
         }
 
+        binding.checkServerButton.setOnClickListener { checkServer() }
+
         binding.resetPromptButton.setOnClickListener {
             app.settings.customPrompt = ""
             binding.promptField.setText(VlmPrompt.describe())
@@ -220,9 +223,38 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Probe the endpoint from the phone, where it is typed and where it goes
+     * wrong. Distinguishes "our server" from "an OpenAI-compatible server that
+     * will 404 on every press" — the latter looks alive and is not.
+     */
+    private fun checkServer() {
+        val app = application as TactileSightApp
+        val url = app.settings.urlFor(app.settings.effectiveMode)
+
+        binding.status.setText(R.string.checking_server)
+        lifecycleScope.launch {
+            binding.status.text = when (val result = ServerCheck.probe(url)) {
+                is ServerCheck.Result.Ready ->
+                    "Server ready · backend: ${result.backend}"
+
+                is ServerCheck.Result.WrongContract ->
+                    "Reachable, but it does not speak /v1/describe — this looks " +
+                        "like LM Studio or llama-server. Run server/app.py in front " +
+                        "of it. Models: ${result.models.joinToString()}"
+
+                is ServerCheck.Result.Unreachable ->
+                    "Cannot reach it — ${result.detail}"
+            }
+            Log.i(TAG, binding.status.text.toString())
+        }
+    }
+
     private fun showEndpointFor(mode: BrainMode) {
         val app = application as TactileSightApp
         binding.endpointField.visibility =
+            if (mode.sendsImageryOffDevice) View.VISIBLE else View.GONE
+        binding.checkServerButton.visibility =
             if (mode.sendsImageryOffDevice) View.VISIBLE else View.GONE
         // Only the cloud needs a model named: the private server picks its own
         // via TS_VLM_BACKEND, and on-device uses whatever is staged.
