@@ -4,7 +4,13 @@
     <string name="subtitle">Walking skeleton · bundled band captures</string>
 
     <string name="label_source">Frame source</string>
+    <string name="label_brain">Describe using</string>
     <string name="label_capture">Capture</string>
+
+    <string name="hint_endpoint">Server address, e.g. http://192.168.1.100:8000</string>
+    <string name="privacy_mode">Privacy mode — never send imagery to the cloud</string>
+    <string name="privacy_blocked">Privacy mode is on, so %s is unavailable. Using on-device.</string>
+    <string name="endpoint_missing">Set a server address first.</string>
 
     <string name="describe">Describe</string>
     <string name="describe_content_description">Describe what is in front of me</string>
@@ -21,6 +27,7 @@
     <string name="status_press_to_capture">Ready. Press to capture from the band.</string>
     <string name="status_working">Looking…</string>
     <string name="status_speech_failed">Could not speak — check the network connection.</string>
+    <string name="status_brain">Ready · %s</string>
     <string name="status_no_key">No Sarvam API key. Add sarvam.api.key to android/local.properties.</string>
     <string name="source_unavailable">%s is not built yet.</string>
     <string name="capture_label">Capture %1$d of %2$d</string>

@@ -11,8 +11,10 @@ import android.widget.LinearLayout
 import android.widget.Spinner
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import androidx.viewpager2.widget.ViewPager2
+import com.tactilesight.core.BrainMode
 import com.tactilesight.core.BrowsableFrameSource
 import com.tactilesight.core.Frame
 import com.tactilesight.core.FrameSource
@@ -56,12 +58,13 @@ class MainActivity : AppCompatActivity() {
         orchestrator = Orchestrator(
             frames = frames,
             // Owned by the Application, so rotation never drops the model.
-            brain = (application as TactileSightApp).brain,
+            brain = { (application as TactileSightApp).brain },
             speech = SarvamSpeechIO(cacheDir),
         )
 
         setUpCarousel()
         setUpSourcePicker()
+        setUpBrainPicker()
         setUpScenePicker()
 
         if (BuildConfig.SARVAM_API_KEY.isBlank()) {
@@ -91,6 +94,82 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+
+    /**
+     * Where the frame gets described: on the phone, on our server, or in the
+     * cloud. The endpoint field appears only for the two that need an address.
+     *
+     * The privacy rule is *not* enforced here. This screen only reflects it —
+     * [TactileSightApp.applyMode] resolves the mode that actually runs, so a
+     * blocked destination cannot be reached by any path through the UI.
+     */
+    private fun setUpBrainPicker() {
+        val app = application as TactileSightApp
+        val modes = BrainMode.entries
+
+        binding.brainSpinner.adapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_dropdown_item,
+            modes.map { it.displayName },
+        )
+        binding.brainSpinner.setSelection(modes.indexOf(app.settings.effectiveMode))
+        binding.privacySwitch.isChecked = app.settings.privacyMode
+
+        binding.brainSpinner.onSelect { position ->
+            val requested = modes[position]
+            app.applyMode(requested)
+            showEndpointFor(app.settings.effectiveMode)
+
+            if (app.settings.effectiveMode != requested) {
+                toast(getString(R.string.privacy_blocked, requested.displayName))
+                binding.brainSpinner.setSelection(modes.indexOf(app.settings.effectiveMode))
+            } else if (requested.sendsImageryOffDevice && app.settings.urlFor(requested).isBlank()) {
+                toast(getString(R.string.endpoint_missing))
+            }
+            showBrain()
+        }
+
+        binding.privacySwitch.setOnCheckedChangeListener { _, isChecked ->
+            app.settings.privacyMode = isChecked
+            // Re-resolve immediately: switching privacy on while a cloud brain
+            // is resident must drop it now, not at the next press.
+            app.applyMode(app.settings.mode)
+            binding.brainSpinner.setSelection(modes.indexOf(app.settings.effectiveMode))
+            showEndpointFor(app.settings.effectiveMode)
+            showBrain()
+        }
+
+        // The address is saved as it is typed, so a tunnel URL survives the
+        // app being killed — which ColorOS does aggressively.
+        binding.endpointField.doAfterTextChanged { text ->
+            val mode = app.settings.effectiveMode
+            if (mode.sendsImageryOffDevice) {
+                app.settings.setUrlFor(mode, text?.toString().orEmpty())
+            }
+        }
+
+        showEndpointFor(app.settings.effectiveMode)
+        showBrain()
+    }
+
+    private fun showEndpointFor(mode: BrainMode) {
+        val app = application as TactileSightApp
+        binding.endpointField.visibility =
+            if (mode.sendsImageryOffDevice) View.VISIBLE else View.GONE
+        val saved = app.settings.urlFor(mode)
+        if (binding.endpointField.text.toString() != saved) {
+            binding.endpointField.setText(saved)
+        }
+    }
+
+    /** Name the resident brain, so which engine answered is never a guess. */
+    private fun showBrain() {
+        val app = application as TactileSightApp
+        binding.status.text = getString(R.string.status_brain, app.brain.name)
+    }
+
+    private fun toast(message: String) =
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
 
     /**
      * A capture picker, but only for a source that has captures to pick from.

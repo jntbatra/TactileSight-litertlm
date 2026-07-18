@@ -54,6 +54,45 @@
         android:layout_marginBottom="20dp" />
 
     <TextView
+        style="@style/TextAppearance.TactileSight.Label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:labelFor="@id/brainSpinner"
+        android:text="@string/label_brain" />
+
+    <Spinner
+        android:id="@+id/brainSpinner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp" />
+
+    <!-- Only shown for a server mode: on-device has no address. -->
+    <EditText
+        android:id="@+id/endpointField"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:hint="@string/hint_endpoint"
+        android:importantForAutofill="no"
+        android:inputType="textUri"
+        android:maxLines="1"
+        android:textColor="@color/on_surface"
+        android:textColorHint="@color/on_surface_muted"
+        android:textSize="14sp" />
+
+    <!-- Privacy is a switch, not a menu: it must be obvious at a glance
+         whether imagery can leave the device. -->
+    <androidx.appcompat.widget.SwitchCompat
+        android:id="@+id/privacySwitch"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:layout_marginBottom="20dp"
+        android:text="@string/privacy_mode"
+        android:textColor="@color/on_surface"
+        android:textSize="14sp" />
+
+    <TextView
         android:id="@+id/captureLabel"
         style="@style/TextAppearance.TactileSight.Label"
         android:layout_width="wrap_content"

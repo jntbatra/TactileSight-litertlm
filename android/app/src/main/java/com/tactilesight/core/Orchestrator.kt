@@ -14,10 +14,25 @@ import android.util.Log
  */
 class Orchestrator(
     private val frames: FrameSource,
-    private val brain: SemanticBrain,
+    /**
+     * Resolved per press, not captured once. The resident brain changes when
+     * the user switches destination (on-device / private server / cloud), and
+     * a reference taken at construction would keep describing on the old one
+     * — including, after privacy mode is switched on, a cloud brain that must
+     * no longer see imagery.
+     */
+    private val brain: () -> SemanticBrain,
     private val speech: SpeechIO,
     private val language: Language = Language.ENGLISH,
 ) {
+
+    /** For a brain that never changes — tests, and any single-engine caller. */
+    constructor(
+        frames: FrameSource,
+        brain: SemanticBrain,
+        speech: SpeechIO,
+        language: Language = Language.ENGLISH,
+    ) : this(frames, { brain }, speech, language)
 
     /**
      * Handle one press. Returns what was spoken, so callers (and tests) can see
@@ -28,12 +43,13 @@ class Orchestrator(
      * would hide a silent app behind a green log line.
      */
     suspend fun onPress(question: String? = null): String {
+        val current = brain()
         val text = try {
             val frame = frames.capture()
             // A blank answer is as dead as a crash — models do return empty
             // strings — so it degrades the same way.
-            brain.describe(frame, question).spoken.ifBlank {
-                Log.w(TAG, "${brain.name} returned a blank answer")
+            current.describe(frame, question).spoken.ifBlank {
+                Log.w(TAG, "${current.name} returned a blank answer")
                 FALLBACK
             }
         } catch (e: Exception) {

@@ -2,10 +2,13 @@ package com.tactilesight
 
 import android.app.Application
 import android.util.Log
+import com.tactilesight.brain.CloudBrain
 import com.tactilesight.brain.GenieXBrain
 import com.tactilesight.brain.ModelStore
 import com.tactilesight.brain.StubBrain
+import com.tactilesight.core.BrainMode
 import com.tactilesight.core.SemanticBrain
+import com.tactilesight.core.Settings
 
 /**
  * Owns the loaded model for the life of the process.
@@ -31,10 +34,30 @@ class TactileSightApp : Application() {
 
     private val brainLock = Any()
 
+    val settings by lazy { Settings(this) }
+
     override fun onCreate() {
         super.onCreate()
-        brain = resolveBrain()
-        Log.i(TAG, "brain = ${brain.name}")
+        applyMode(settings.effectiveMode)
+    }
+
+    /**
+     * Switch to [mode], releasing whatever model was resident.
+     *
+     * Goes through [Settings.effectiveMode], so privacy mode cannot be talked
+     * around: asking for [BrainMode.CLOUD] with privacy on lands on-device
+     * instead of off-device. Hard rule #7 says privacy must actually block the
+     * cloud, and a check that lives only in a spinner listener is one refactor
+     * away from not existing.
+     */
+    fun applyMode(requested: BrainMode) {
+        settings.mode = requested
+        val mode = settings.effectiveMode
+        if (mode != requested) {
+            Log.w(TAG, "$requested blocked by privacy mode — using $mode")
+        }
+        switchBrain(brainFor(mode))
+        Log.i(TAG, "brain = ${brain.name} (mode=$mode)")
     }
 
     /**
@@ -42,14 +65,20 @@ class TactileSightApp : Application() {
      * on first use, under its own lock. Startup stays fast and a missing model
      * surfaces as a spoken fallback rather than a crash at launch.
      */
-    private fun resolveBrain(): SemanticBrain {
-        // GGUF first: GenieX 0.3.1's QAIRT plugin carries exactly one VLM
-        // factory (qwen2_5_vl), so a QAIRT bundle for any other architecture
-        // fails to dispatch — our Qwen3-VL-4B bundle does, with
-        //   "no VLM factory matches model_id 'qwen3_vl_4b_instruct'".
-        // llama_cpp has no such registry and is the path that has actually
-        // produced tokens on this device. Reaching the NPU needs a Qwen2.5-VL
-        // QAIRT bundle; until one is staged, GGUF is the working brain.
+    private fun brainFor(mode: BrainMode): SemanticBrain = when (mode) {
+        BrainMode.ON_DEVICE -> onDeviceBrain()
+        BrainMode.PRIVATE_SERVER, BrainMode.CLOUD -> {
+            val url = settings.urlFor(mode)
+            if (url.isBlank()) {
+                Log.w(TAG, "no URL set for $mode — falling back to the stub brain")
+                StubBrain()
+            } else {
+                CloudBrain(baseUrl = url, name = mode.displayName)
+            }
+        }
+    }
+
+    private fun onDeviceBrain(): SemanticBrain {
         val bundle = ENGINE_PREFERENCE
             .firstNotNullOfOrNull { modelStore.available(it).firstOrNull() }
 
