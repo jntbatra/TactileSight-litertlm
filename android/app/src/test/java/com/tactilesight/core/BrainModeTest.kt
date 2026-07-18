@@ -14,7 +14,8 @@ class BrainModeTest {
 
     @Test
     fun `only on-device keeps imagery on the phone`() {
-        assertFalse(BrainMode.ON_DEVICE.sendsImageryOffDevice)
+        assertFalse(BrainMode.ON_DEVICE_NPU.sendsImageryOffDevice)
+        assertFalse(BrainMode.ON_DEVICE_GPU.sendsImageryOffDevice)
         assertTrue(BrainMode.PRIVATE_SERVER.sendsImageryOffDevice)
         assertTrue(BrainMode.CLOUD.sendsImageryOffDevice)
     }
@@ -30,7 +31,8 @@ class BrainModeTest {
         // destination, not the transit — a tunnel terminates TLS at its edge,
         // which is why the LAN address is the version that is private
         // end-to-end. See BrainMode's docs.
-        assertTrue(BrainMode.ON_DEVICE.isAllowedUnderPrivacy(privacyOn = true))
+        assertTrue(BrainMode.ON_DEVICE_NPU.isAllowedUnderPrivacy(privacyOn = true))
+        assertTrue(BrainMode.ON_DEVICE_GPU.isAllowedUnderPrivacy(privacyOn = true))
         assertTrue(BrainMode.PRIVATE_SERVER.isAllowedUnderPrivacy(privacyOn = true))
     }
 

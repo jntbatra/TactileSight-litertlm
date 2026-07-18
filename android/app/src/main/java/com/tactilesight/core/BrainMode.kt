@@ -20,8 +20,18 @@ enum class BrainMode(
     val displayName: String,
     val sendsImageryOffDevice: Boolean,
 ) {
-    /** Nothing leaves the phone. NPU where a QAIRT bundle is staged, else GPU. */
-    ON_DEVICE("On-device", sendsImageryOffDevice = false),
+    /**
+     * Nothing leaves the phone, on the Hexagon NPU via QAIRT. The fast path:
+     * 260 ms to first token against the GPU's 3417 ms, measured 2026-07-18.
+     */
+    ON_DEVICE_NPU("On-device · NPU", sendsImageryOffDevice = false),
+
+    /**
+     * Nothing leaves the phone, on the Adreno GPU via llama_cpp and GGUF.
+     * Slower, but takes any GGUF with an `mmproj` — so it runs models QAIRT
+     * has no factory for, and works on a device with no QAIRT bundle staged.
+     */
+    ON_DEVICE_GPU("On-device · GPU", sendsImageryOffDevice = false),
 
     /** Our own machine — the laptop tier, reached by LAN address or tunnel. */
     PRIVATE_SERVER("Private server", sendsImageryOffDevice = true),

@@ -16,7 +16,7 @@ class Settings(context: Context) {
     var mode: BrainMode
         get() = prefs.getString(KEY_MODE, null)
             ?.let { saved -> BrainMode.entries.firstOrNull { it.name == saved } }
-            ?: BrainMode.ON_DEVICE
+            ?: BrainMode.ON_DEVICE_NPU
         set(value) = prefs.edit().putString(KEY_MODE, value.name).apply()
 
     /** Our own machine — a LAN address, or a tunnel to it. */
@@ -48,26 +48,26 @@ class Settings(context: Context) {
 
     /**
      * The mode that will actually be used. Privacy mode forces anything it
-     * forbids back to [BrainMode.ON_DEVICE] rather than failing the press,
+     * forbids back to [BrainMode.ON_DEVICE_NPU] rather than failing the press,
      * because hard rule #4 says every press yields speech.
      *
      * Resolving it here means a stale saved preference — privacy switched on
      * while CLOUD was selected, then a restart — cannot leak a frame.
      */
     val effectiveMode: BrainMode
-        get() = mode.takeIf { it.isAllowedUnderPrivacy(privacyMode) } ?: BrainMode.ON_DEVICE
+        get() = mode.takeIf { it.isAllowedUnderPrivacy(privacyMode) } ?: BrainMode.ON_DEVICE_NPU
 
     fun urlFor(mode: BrainMode): String = when (mode) {
         BrainMode.PRIVATE_SERVER -> privateServerUrl
         BrainMode.CLOUD -> cloudUrl
-        BrainMode.ON_DEVICE -> ""
+        BrainMode.ON_DEVICE_NPU, BrainMode.ON_DEVICE_GPU -> ""
     }
 
     fun setUrlFor(mode: BrainMode, url: String) {
         when (mode) {
             BrainMode.PRIVATE_SERVER -> privateServerUrl = url
             BrainMode.CLOUD -> cloudUrl = url
-            BrainMode.ON_DEVICE -> Unit
+            BrainMode.ON_DEVICE_NPU, BrainMode.ON_DEVICE_GPU -> Unit
         }
     }
 

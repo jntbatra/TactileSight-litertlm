@@ -67,7 +67,8 @@ class TactileSightApp : Application() {
      * surfaces as a spoken fallback rather than a crash at launch.
      */
     private fun brainFor(mode: BrainMode): SemanticBrain = when (mode) {
-        BrainMode.ON_DEVICE -> onDeviceBrain()
+        BrainMode.ON_DEVICE_NPU -> onDeviceBrain(ModelStore.Engine.GENIEX)
+        BrainMode.ON_DEVICE_GPU -> onDeviceBrain(ModelStore.Engine.GENIEX_GGUF)
 
         // Our own server, speaking our frozen /v1/describe contract.
         BrainMode.PRIVATE_SERVER -> settings.privateServerUrl.ifBlank {
@@ -88,21 +89,33 @@ class TactileSightApp : Application() {
         }
     }
 
-    private fun onDeviceBrain(): SemanticBrain {
-        val bundle = ENGINE_PREFERENCE
-            .firstNotNullOfOrNull { modelStore.available(it).firstOrNull() }
+    /**
+     * The brain for one specific engine, so the picker means what it says.
+     *
+     * If that engine has nothing staged we fall back to the *other* on-device
+     * engine rather than to silence — hard rule #4, every press yields speech.
+     * That is not a lie to the user: [SemanticBrain.name] reports the engine
+     * that actually answered, and the screen shows it.
+     */
+    private fun onDeviceBrain(preferred: ModelStore.Engine): SemanticBrain {
+        val order = listOf(preferred) + ENGINE_PREFERENCE.filterNot { it == preferred }
+        val engine = order.firstOrNull { modelStore.available(it).isNotEmpty() }
 
-        if (bundle == null) {
+        if (engine == null) {
             Log.w(
                 TAG,
                 "no model in " +
-                    ENGINE_PREFERENCE.joinToString { modelStore.directoryFor(it).path } +
+                    order.joinToString { modelStore.directoryFor(it).path } +
                     " — falling back to the stub brain",
             )
             return StubBrain()
         }
 
-        return GenieXBrain(context = this, modelDir = bundle)
+        if (engine != preferred) {
+            Log.w(TAG, "no bundle for $preferred — using $engine instead")
+        }
+
+        return GenieXBrain(context = this, modelDir = modelStore.available(engine).first())
     }
 
     /**
