@@ -347,7 +347,29 @@ class GenieXBrain(
         const val TAG = "GenieXBrain"
         const val CONTENT_IMAGE = "image"
         const val CONTENT_TEXT = "text"
-        const val MAX_TOKENS = 64
+        /**
+         * Enough that a real answer finishes; tight enough that a rambling one
+         * still ends.
+         *
+         * A good answer is ~22 tokens and stops on `eos` — *"In front of you is
+         * a sign that says "WASHROOM" and a doorway to your right."* The cap
+         * only bites on crowded scenes, and at 64 it bit **mid-word**: a room of
+         * people on bean bags gave *"…and in front of you is a white chair with
+         * a person sitting in"* — `stop=length`, cut in the middle. Spoken
+         * aloud that is worse than a short answer, because the listener cannot
+         * tell whether the sentence ended or the device failed.
+         *
+         * 96 costs ~3.8 s of decode at the measured 25 tok/s in the worst case,
+         * against ~0.9 s for a typical answer. The ceiling is what is being paid
+         * for here, not the common case.
+         *
+         * **Raising this fixes a truncated answer, not a listy one.** The
+         * bean-bag response was already failing the prompt's "group related
+         * things into one phrase rather than listing them" well before it ran
+         * out of tokens. If crowded scenes still produce inventories, that is a
+         * prompt problem and this constant is the wrong place to fix it.
+         */
+        const val MAX_TOKENS = 96
         const val CONTEXT_TOKENS = 1024
         const val MMPROJ_PREFIX = "mmproj"
 

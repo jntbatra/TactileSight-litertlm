@@ -31,6 +31,14 @@ package com.tactilesight.brain
  * - *"Do not mention distance"* — the VLM cannot measure. Distance is appended
  *   by the phone from depth (ADR-0013). This line is a hard rule, not a style
  *   preference.
+ * - *"If people are there… if there are none, say nothing about people at all"*
+ *   — both halves are needed and they fix opposite failures. Listing "people"
+ *   among the things to lead with was not enough on its own: the model
+ *   described a room of seated people as furniture. But an instruction to
+ *   report people invites the negative, and *"there is no one in front of you"*
+ *   spoken on every empty corridor is noise that trains the user to stop
+ *   listening. Absence of people is the default state of the world and does not
+ *   need saying.
  *
  * The VLM always answers in **English** — small VLMs are markedly weak in Indic
  * languages, so translation happens afterwards via Sarvam (ADR-0012).
@@ -52,6 +60,8 @@ object VlmPrompt {
             "using \"in front of you\", \"to your left\", \"to your right\". " +
             "Lead with whatever affects their next step: obstacles, people, doorways, stairs, " +
             "and any objects or animals on the floor. " +
+            "If people are there, say where they are and refer to them in the third person. " +
+            "If there are none, say nothing about people at all — never say that nobody is there. " +
             "Read out any sign, board or written text, especially directions and danger warnings. " +
             "Group related things into one phrase rather than listing them. No preamble. " +
             "Only describe what is really there. Never state a distance. Answer in English."
