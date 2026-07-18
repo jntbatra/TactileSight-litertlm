@@ -37,6 +37,7 @@ import com.tactilesight.frame.FrameSourceKind
 import com.tactilesight.speech.SarvamSpeechIO
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.io.File
 
 /**
  * The walking skeleton (#1): pick a bundled band capture, press, hear a
@@ -95,6 +96,82 @@ class MainActivity : AppCompatActivity() {
         if (intent?.getBooleanExtra(EXTRA_HEXAGON, false) == true) {
             runHexagonProbe(intent?.getStringExtra(EXTRA_UNIT) ?: "npu")
         }
+
+        // adb shell am start -n <pkg>/.MainActivity --ez compare true
+        // --es bundles geniex,geniex-4b   --ei scenes 3
+        // Runs every named QAIRT bundle over the same scenes so model choice is
+        // decided by output, not by parameter count.
+        if (intent?.getBooleanExtra(EXTRA_COMPARE, false) == true) {
+            runModelComparison(
+                names = (intent?.getStringExtra(EXTRA_BUNDLES) ?: DEFAULT_COMPARE_BUNDLES)
+                    .split(",").map { it.trim() }.filter { it.isNotEmpty() },
+                scenes = intent?.getIntExtra(EXTRA_SCENES, 3) ?: 3,
+            )
+        }
+    }
+
+    /**
+     * Load each QAIRT bundle in turn and describe the same scenes with each.
+     *
+     * Deliberately sequential with a settle between models: two multi-GB VLMs
+     * must never be resident at once, and the previous process's mapping is not
+     * reclaimed the instant it is closed — a comparison that OOMs the second
+     * model has measured nothing except its own impatience.
+     *
+     * Everything goes to logcat rather than the screen because the point is to
+     * read the answers side by side afterwards. Failures are logged and the run
+     * continues: "this bundle does not load" is a result worth having, and it is
+     * the most likely result for a bundle that is too large for the device.
+     */
+    private fun runModelComparison(names: List<String>, scenes: Int) {
+        val app = application as TactileSightApp
+        binding.status.text = getString(R.string.status_working)
+
+        lifecycleScope.launch {
+            val browsable = frames as BrowsableFrameSource
+            val sceneIds = browsable.sceneIds.take(scenes)
+            Log.i(TAG, "compare: ${names.size} bundles x ${sceneIds.size} scenes")
+
+            for (name in names) {
+                val dir = File(getExternalFilesDir(null), "models/$name")
+                if (!dir.isDirectory) {
+                    Log.w(TAG, "compare[$name]: no such bundle — skipped")
+                    continue
+                }
+
+                // Let the previous model's pages go back before mapping the next.
+                delay(SETTLE_BEFORE_SWEEP_MS)
+                Log.i(TAG, "compare[$name]: available=${memAvailableMb()} MB before load")
+
+                val brain = GenieXBrain(
+                    context = applicationContext,
+                    modelDir = dir,
+                    runtime = RuntimeIdValue.QAIRT,
+                    computeUnit = ComputeUnitValue.NPU,
+                )
+                try {
+                    app.switchBrain(brain)
+                    for (id in sceneIds) {
+                        val answer = brain.describe(browsable.load(id))
+                        Log.i(TAG, "compare[$name] $id: ${answer.spoken}")
+                    }
+                    Log.i(TAG, "compare[$name]: available=${memAvailableMb()} MB after")
+                } catch (e: Exception) {
+                    Log.e(TAG, "compare[$name]: FAILED — ${e.message}", e)
+                }
+            }
+            Log.i(TAG, "compare: done")
+            binding.status.text = "Comparison done — see logcat"
+        }
+    }
+
+    /** Read straight from the kernel; Runtime.maxMemory reports the heap cap. */
+    private fun memAvailableMb(): Long = try {
+        File("/proc/meminfo").readLines()
+            .first { it.startsWith("MemAvailable:") }
+            .filter { it.isDigit() }.toLong() / 1024
+    } catch (e: Exception) {
+        -1
     }
 
     private fun setUpSourcePicker() {
@@ -523,5 +600,11 @@ class MainActivity : AppCompatActivity() {
         const val SETTLE_BEFORE_SWEEP_MS = 8_000L
         const val EXTRA_HEXAGON = "hexagon"
         const val EXTRA_UNIT = "unit"
+        const val EXTRA_COMPARE = "compare"
+        const val EXTRA_BUNDLES = "bundles"
+        const val EXTRA_SCENES = "scenes"
+
+        /** Both QAIRT bundles staged on the device: the 8B upgrade and the 4B incumbent. */
+        const val DEFAULT_COMPARE_BUNDLES = "geniex,geniex-4b"
     }
 }

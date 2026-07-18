@@ -340,3 +340,33 @@ Checked 2026-07-19 for `qualcomm-snapdragon-8-elite-gen5`:
 Note what this does **not** mean. Gemma still reaches the Hexagon NPU — via `llama_cpp` + `ComputeUnitValue.NPU`, measured above at 2688 ms. The missing QAIRT bundle costs it ~10×, but not the NPU itself. (An earlier version of this note said "Gemma cannot reach the NPU"; that was written before the `llama_cpp`/NPU measurement and was wrong.)
 
 **Practical consequence: on-device, we are limited to the Qwen VLM family.** Before getting attached to any model as an on-device candidate, read its manifest. If there is no QAIRT bundle, it belongs on the private-server tier instead.
+
+### The real ceiling is CDSP contexts, not system RAM
+
+**A published QAIRT bundle for your exact chipset can still be unloadable.** Measured 2026-07-19: Qwen3-VL-8B-Instruct downloaded, verified byte-exact, unpacked to 6.9 GB, pushed clean — and failed in 8.5 s with **9.6 GB of system RAM free**:
+
+```
+Could not create context from binary for context index = 4 : err 1007
+Create From Binary FAILED!
+unable to unmap addr 0xcf000000 of length 585105408 bytes
+```
+
+Contexts 0–3 mapped, context 4 did not. Each is ~558 MB and lives in **CDSP address space**, which has nothing to do with the 15.5 GB the phone reports. Count shards, not gigabytes:
+
+| Model | shards | loads? |
+|---|---|---|
+| Qwen3-VL-4B | 4 (`part1_of_4`…) | ✅ 330 ms, 1169 tok/s |
+| Qwen3-VL-8B | 6 (`part1_of_6`…) | ❌ dies on the 5th context |
+
+Observed ceiling: **~4 contexts / ~2.2 GB of DSP.** So Qwen3-VL-4B is not the model we settled for — it is the largest VLM that fits this NPU.
+
+**Two traps this sets:**
+
+1. **`MemAvailable` tells you nothing about whether a model will load.** Do not size a model against it. We watched it all night and it was never the binding constraint.
+2. **A failed QAIRT load wedges the DSP for the whole process.** After the 8B failed, the 4B — which works — failed too, with `memRegister ERROR(8002)` and `Failed to free device: 14003`. **Always force-stop between bundle load attempts.** Comparing two models in one process measures the second one's contamination, not the second model.
+
+```bash
+adb shell am force-stop com.tactilesight   # between EVERY load attempt
+adb shell am start -n com.tactilesight/.MainActivity \
+    --ez compare true --es bundles geniex --ei scenes 2
+```

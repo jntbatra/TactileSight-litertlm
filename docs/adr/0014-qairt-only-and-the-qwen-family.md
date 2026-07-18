@@ -44,7 +44,34 @@ The other staged models are also not QAIRT, for separate reasons:
 
 **Model choice: Qwen3-VL-8B-Instruct, pending a load test.** Same architecture family as the working 4B, so `geniex::qwen3_vl::makeModel` in GenieX 0.3.12 already handles it and the swap is a bundle path, not a code change. 2× the parameters should help the two things the demo is judged on: sign reading and not inventing detail.
 
-**This part is provisional and must not be treated as settled.** ~6.8 GB unpacked against 9.8 GB `MemAvailable` measured at the time of writing. We have already been OOM-killed once at 3.5 GB available. **The 4B bundle stays on disk until the 8B is proven describing on device.**
+> ⚠️ **RESOLVED 2026-07-19 02:01 — the 8B does not load on this device. We stay on the 4B.** Measured, reproducible in a clean process, and the reason is not the one this ADR anticipated. See "The 8B result" below.
+
+~~**This part is provisional and must not be treated as settled.** ~6.8 GB unpacked against 9.8 GB `MemAvailable` measured at the time of writing. We have already been OOM-killed once at 3.5 GB available. **The 4B bundle stays on disk until the 8B is proven describing on device.**~~
+
+### The 8B result: a DSP ceiling, not a RAM ceiling
+
+The bundle downloaded, verified byte-exact (5,263,195,089), unpacked to 6.9 GB, pushed clean, and **failed to load in 8.5 seconds with 9.6 GB of system RAM free**:
+
+```
+Could not create context from binary for context index = 4 : err 1007
+Create From Binary FAILED!
+unable to unmap addr 0xcf000000 of length 585105408 bytes
+```
+
+Contexts 0–3 mapped; **context 4 did not**. Each is ~558 MB, and they live in **CDSP address space**, which is nothing like the phone's 15.5 GB of system memory. Qwen3-VL-4B ships **4 shards** and loads; Qwen3-VL-8B ships **6** and dies on the fifth. The observed ceiling is therefore about **four contexts / ~2.2 GB of DSP**, and it is invisible from every number we had been watching.
+
+**This invalidates the RAM-budget reasoning above and in ADR-0010.** `MemAvailable` was never the binding constraint — we were watching the wrong meter all night. A model can have a published QAIRT bundle for our exact chipset, fit in system RAM with 3 GB to spare, and still be unloadable.
+
+**Qwen2.5-VL-7B is not worth fetching.** It sits between the two on size, so it would need five or more contexts against a four-context ceiling. Predicted failure, and an hour of download on a 1.5 MB/s bucket to confirm it. Not spent.
+
+**Qwen3-VL-4B is therefore not a compromise — it is the largest VLM that fits this NPU.** That is a stronger claim than "the one we happened to have", and it is the honest thing to say about it.
+
+Post-restore verification, same scene, clean process:
+
+```
+ttft=330ms  prefill=1169 tok/s  decode=24.9 tok/s  runtime=qairt unit=npu
+"In front of you is a sign that says "WASHROOM" and a doorway to your right."
+```
 
 ## Rationale / alternatives considered
 
