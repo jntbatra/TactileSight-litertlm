@@ -39,6 +39,36 @@ package com.tactilesight.brain
  *   spoken on every empty corridor is noise that trains the user to stop
  *   listening. Absence of people is the default state of the world and does not
  *   need saying.
+ * - *"as "a person" or "people" — never guess their gender"* — the model
+ *   reached for *"a man sitting on it"*, *"a man walking toward you"* on every
+ *   figure it saw. It cannot know that; it is inferring gender from clothing
+ *   and build. Our user cannot see the person to notice the mistake, and a
+ *   confident wrong detail is worse than a missing one — the whole device rests
+ *   on the user trusting what it says. "A person" costs nothing and is never
+ *   wrong.
+ * - *"Do not mention colours"* — added to the existing grouping rule after the
+ *   model answered a lounge with *"a red bean bag chair, a green bean bag
+ *   chair, a blue bean bag chair, a yellow bean bag chair"*. Colour is the
+ *   detail it reaches for when it has nothing useful to say.
+ *
+ * ### Two rules this prompt learned the hard way — do not undo them
+ *
+ * **Never put an example phrase in this prompt.** A version that read *"say
+ * several similar things as one group, like "a few chairs to your left""* got
+ * *"a few chairs to your left"* echoed verbatim into all four test scenes,
+ * including ones with no chairs — and, worse, that same version started
+ * inventing signs (*a sign on the wall reading "EXIT"*, *"Welcome to the
+ * Plaza"*) in scenes that had none. `prompt.py` warned about echoed examples;
+ * it was measured here.
+ *
+ * **Every "always report X" needs its "say nothing when there is no X".** This
+ * bit twice, identically. Instructing the model to report people made it
+ * announce their absence; instructing it to *"say the exact words in quotes —
+ * never just say that a sign is there"* produced *"no sign or board visible
+ * nearby"*, and then a fabricated sign reading *"in front of you"* — the
+ * prompt's own words quoted back as if painted on a wall. Asking for quotes
+ * invites manufacturing quotable text. The working form asks for the words and
+ * pairs it with silence-on-absence.
  *
  * The VLM always answers in **English** — small VLMs are markedly weak in Indic
  * languages, so translation happens afterwards via Sarvam (ADR-0012).
@@ -60,10 +90,13 @@ object VlmPrompt {
             "using \"in front of you\", \"to your left\", \"to your right\". " +
             "Lead with whatever affects their next step: obstacles, people, doorways, stairs, " +
             "and any objects or animals on the floor. " +
-            "If people are there, say where they are and refer to them in the third person. " +
+            "If people are there, say where they are, in the third person, as \"a person\" or " +
+            "\"people\" — never guess their gender. " +
             "If there are none, say nothing about people at all — never say that nobody is there. " +
-            "Read out any sign, board or written text, especially directions and danger warnings. " +
-            "Group related things into one phrase rather than listing them. No preamble. " +
+            "If a sign or board has words on it, read the words out; directions and danger " +
+            "warnings matter most. If there is no writing, say nothing about signs. " +
+            "Group related things into one phrase rather than listing them. " +
+            "Do not mention colours. No preamble. " +
             "Only describe what is really there. Never state a distance. Answer in English."
 
     /** The user asked something specific about the scene. */

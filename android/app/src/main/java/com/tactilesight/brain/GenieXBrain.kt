@@ -9,6 +9,7 @@ import com.geniex.sdk.bean.GenerationConfig
 import com.geniex.sdk.bean.LlmStreamResult
 import com.geniex.sdk.bean.ModelConfig
 import com.geniex.sdk.bean.RuntimeIdValue
+import com.geniex.sdk.bean.SamplerConfig
 import com.geniex.sdk.bean.VlmChatMessage
 import com.geniex.sdk.bean.VlmContent
 import com.geniex.sdk.bean.VlmCreateInput
@@ -143,7 +144,17 @@ class GenieXBrain(
 
             // The image reaches the model through GenerationConfig.imagePaths;
             // injectMediaPathsToConfig walks the messages and fills them in.
-            val generation = GenerationConfig().apply { maxTokens = MAX_TOKENS }
+            // Sampling is set explicitly, not left to the SDK default. A crowded
+            // scene made the model loop — "to your right is a person sitting on
+            // a beanbag chair" eight times until it hit the token cap — which is
+            // a decoding failure, not a prompt one, and no wording fixes it.
+            val generation = GenerationConfig().apply {
+                maxTokens = MAX_TOKENS
+                samplerConfig = SamplerConfig().apply {
+                    temperature = TEMPERATURE
+                    repetitionPenalty = REPETITION_PENALTY
+                }
+            }
             val configured = model.injectMediaPathsToConfig(messages, generation)
 
             val templated = model.applyChatTemplate(messages, null, true).getOrThrow()
@@ -370,6 +381,23 @@ class GenieXBrain(
          * prompt problem and this constant is the wrong place to fix it.
          */
         const val MAX_TOKENS = 96
+        /**
+         * Low, not zero. This is a description of a real scene, not a creative
+         * task: we want the likeliest reading of what is in frame, and variance
+         * here shows up as invented detail.
+         */
+        const val TEMPERATURE = 0.2f
+
+        /**
+         * The fix for a model that loops. Left at the SDK default, a lounge full
+         * of people produced "to your right is a person sitting on a beanbag
+         * chair" eight times over, running to the token cap mid-phrase. 1.15 is
+         * enough to break the cycle without pushing it to reach for unusual
+         * words - which, in a device that must not invent detail, is the failure
+         * mode on the other side of this dial.
+         */
+        const val REPETITION_PENALTY = 1.15f
+
         const val CONTEXT_TOKENS = 1024
         const val MMPROJ_PREFIX = "mmproj"
 
