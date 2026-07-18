@@ -124,6 +124,71 @@ GET  /health        →  {status, backend}
 - Adding a VLM = **one backend class** implementing `generate(image_bytes, prompt) -> str`. Selected by `TS_VLM_BACKEND`.
 - `server/test_app.py` green (`TS_VLM_BACKEND=mock`) **is** the compatibility check between tracks.
 
+### Pointing the phone at a private server
+
+Two kinds of server get pointed at that field, and the app supports both. The **Check** button next to the endpoint probes for each and remembers which it found, so Describe uses the right wire format:
+
+| probe | server | how the phone talks to it |
+|---|---|---|
+| `GET /health` → `{status, backend}` | our `server/app.py` | `POST /v1/describe` (the frozen contract) |
+| `GET /v1/models` → `{data:[{id}]}` | LM Studio, llama-server, vLLM | `POST /v1/chat/completions` with `image_url` content |
+
+**Talking to LM Studio directly is supported and is the simpler setup** — no FastAPI layer, no `TS_VLM_BACKEND`, just LM Studio serving a model. Point the phone at its address, press Check, pick the model it reports. Example response from LM Studio serving four models:
+
+```json
+{"data":[{"id":"google/gemma-4-12b-qat","object":"model"},
+         {"id":"qwen/qwen3.5-9b","object":"model"}, ...]}
+```
+
+`gemma-4-12b-qat` is far beyond what the phone can hold, which is the entire point of this tier.
+
+Use `server/app.py` instead when you need what it adds: the frozen `{spoken, rich, confident}` shape, the server-side prompt, `mode`/`language`, or a backend LM Studio cannot serve (QEfficient on Cloud AI 100). Then run it in front:
+
+```bash
+TS_VLM_BACKEND=openai TS_OPENAI_BASE_URL=http://localhost:8080/v1 \
+  uvicorn app:app --host 0.0.0.0 --port 8000
+```
+
+⚠️ **The prompt lives on the phone in the LM Studio path.** There is no server to hold it, so `VlmPrompt` is what gets sent — the same prompt the on-device brain uses. That keeps the two consistent, but it means the "prompt lives server-side" rule does not apply to this route; do not change one and assume the other followed.
+
+### Sarvam: probe the API, do not trust the docs
+
+The docs 404 and render in JavaScript. The API tells you the truth if you send an invalid value — the validation error enumerates what is valid:
+
+```bash
+curl -s -X POST https://api.sarvam.ai/text-to-speech \
+  -H "api-subscription-key: $KEY" -H "Content-Type: application/json" \
+  -d '{"text":"t","target_language_code":"zz-ZZ","model":"bulbul:v3"}'
+```
+
+Three things this found that cost us an evening (2026-07-18):
+
+1. **TTS does not translate.** English text with `target_language_code: pa-IN` gives English words in a Punjabi voice. Everything succeeds; the user just cannot understand it. **Always `POST /translate` first.**
+2. **Use `sarvam-translate:v1`, not the default `mayura:v1`** — 22 languages against 10.
+3. **`bulbul:v3` speaks only 11.** The other 12 need beta access on the account. Do not list a language we cannot speak: it translates, then fails at the last step.
+
+Speakers are per-model — `bulbul:v2`'s `anushka` is rejected by `bulbul:v3`. We run `bulbul:v3` + `ritu`.
+
+### Secrets
+
+Sarvam credentials go in env/secure config. **This repo is public** — a committed key is a compromised key.
+
+---
+
+## The server contract (frozen)
+
+Both tracks build against this. It already exists in `server/` and is tested.
+
+```
+POST /v1/describe   {mode, question, language, image_b64}  →  {spoken, rich, confident}
+GET  /health        →  {status, backend}
+```
+
+- **base64 JSON, not multipart.**
+- The **prompt lives server-side** in `server/prompt.py`. Do not write a private prompt anywhere else — that file encodes the spoken contract (terse, the VLM never states distance, hedge-never-guess). A second prompt means the phone silently behaves differently, and we have already lost hours to exactly that.
+- Adding a VLM = **one backend class** implementing `generate(image_bytes, prompt) -> str`. Selected by `TS_VLM_BACKEND`.
+- `server/test_app.py` green (`TS_VLM_BACKEND=mock`) **is** the compatibility check between tracks.
+
 ### Checking a private server from the phone
 
 The endpoint is typed into the app and changes constantly (a tunnel URL changes on every restart), so "is it reachable, and what is behind it" has to be answerable **from the phone**, not from a laptop terminal. The app has a **Check** button next to the endpoint field for exactly this.
