@@ -47,11 +47,34 @@ import kotlin.coroutines.resume
 class GenieXBrain(
     private val context: Context,
     private val modelDir: File,
-    private val runtime: RuntimeIdValue = RuntimeIdValue.QAIRT,
-    private val computeUnit: ComputeUnitValue = ComputeUnitValue.NPU,
+    runtime: RuntimeIdValue? = null,
+    computeUnit: ComputeUnitValue? = null,
 ) : SemanticBrain {
 
-    override val name: String = "GenieX (${runtime.value}/${computeUnit.value})"
+    /**
+     * Which backend this bundle needs, inferred from what is in it unless the
+     * caller forces one — #2's NPU-vs-GPU comparison forces both in turn.
+     *
+     * A QAIRT bundle is compiled per-SoC and carries [ModelStore.BUNDLE_MARKER];
+     * GGUF weights can only be driven by llama_cpp. Guessing wrong is not a
+     * graceful failure — QAIRT rejects GGUF with a bare error code.
+     */
+    private val runtime: RuntimeIdValue = runtime
+        ?: if (File(modelDir, ModelStore.BUNDLE_MARKER).exists()) {
+            RuntimeIdValue.QAIRT
+        } else {
+            RuntimeIdValue.LLAMA_CPP
+        }
+
+    /**
+     * QAIRT exists to drive the Hexagon NPU. llama_cpp reaches Adreno through
+     * ggml's OpenCL backend, which is where our fastest measured numbers came
+     * from (71 tok/s prefill on Gemma-4-E4B).
+     */
+    private val computeUnit: ComputeUnitValue = computeUnit
+        ?: if (this.runtime == RuntimeIdValue.QAIRT) ComputeUnitValue.NPU else ComputeUnitValue.GPU
+
+    override val name: String = "GenieX (${this.runtime.value}/${this.computeUnit.value})"
 
     private val loadLock = Mutex()
 
@@ -127,7 +150,9 @@ class GenieXBrain(
 
             // A blank answer is handled upstream by the Orchestrator, which
             // degrades it to spoken fallback rather than a silent press.
-            return Answer(answer.toString().trim())
+            val spoken = answer.toString().trim()
+            Log.i(TAG, "answer: $spoken")
+            return Answer(spoken)
         } finally {
             imagePath.delete()
         }
@@ -155,13 +180,34 @@ class GenieXBrain(
                 .vlmCreateInput(
                     VlmCreateInput(
                         bundle.name,
-                        bundle.absolutePath,
+                        modelPathFor(bundle),
                         mmprojPathIn(bundle),
-                        ModelConfig().apply {
-                            // A one-shot description needs nowhere near the
-                            // bundle's 4096 ceiling, and KV cache scales with it.
-                            nCtx = CONTEXT_TOKENS
-                        },
+                        // Positional, because verbose has no setter — and its
+                        // native logging is the only way to see why creation
+                        // fails; the JNI layer surfaces bare error codes.
+                        // n_ctx must be 0 on QAIRT: the bundle's context is
+                        // compiled in (4096) and the plugin rejects any value,
+                        // including the SDK default —
+                        //   "--nctx (n_ctx) is not supported by the qairt plugin"
+                        ModelConfig(
+                            /* nCtx = */ if (runtime == RuntimeIdValue.LLAMA_CPP) CONTEXT_TOKENS else 0,
+                            /* nThreads = */ 8,
+                            /* nThreadsBatch = */ 8,
+                            /* nBatch = */ 2048,
+                            /* nUBatch = */ 512,
+                            /* nSeqMax = */ 1,
+                            // llama_cpp offloads nothing unless told how many
+                            // layers to move; 0 would run on CPU while still
+                            // reporting "gpu", which is exactly the kind of
+                            // silent lie #2's benchmark exists to catch. QAIRT
+                            // ignores this — its placement is compiled in.
+                            /* nGpuLayers = */ if (runtime == RuntimeIdValue.LLAMA_CPP) ALL_LAYERS else 0,
+                            /* chatTemplatePath = */ "",
+                            /* chatTemplateContent = */ "",
+                            /* maxTokens = */ 2048,
+                            /* enableThinking = */ false,
+                            /* verbose = */ true,
+                        ),
                         runtime.value,
                         computeUnit.value,
                     ),
@@ -177,11 +223,34 @@ class GenieXBrain(
     }
 
     /**
+     * The QAIRT plugin takes the dirname of `model_path` and looks for `.bin`
+     * shards there, so it must be handed a **file inside** the bundle. Passing
+     * the bundle directory makes it search the parent and fail with:
+     *
+     * ```
+     * No .bin LLM shards found in: …/files/models/geniex
+     * ```
+     *
+     * `genie_config.json` is the natural anchor — it is the pipeline config the
+     * bundle is built around, and it sits beside the shards.
+     */
+    private fun modelPathFor(bundle: File): String {
+        val anchor = File(bundle, ModelStore.BUNDLE_MARKER).takeIf { it.exists() }
+            ?: bundle.listFiles { it.isWeightFile }?.minByOrNull { it.name }
+            ?: return bundle.absolutePath
+        return anchor.absolutePath
+    }
+
+    /** The projector is weights too, but it is never the model to load. */
+    private val File.isWeightFile: Boolean
+        get() = extension in ModelStore.WEIGHT_EXTENSIONS && !name.startsWith(MMPROJ_PREFIX)
+
+    /**
      * GenieX's llama_cpp backend needs the multimodal projector alongside the
      * weights; QAIRT bundles carry the vision encoder internally and do not.
      */
     private fun mmprojPathIn(bundle: File): String =
-        bundle.listFiles { f -> f.name.startsWith("mmproj") }
+        bundle.listFiles { f -> f.name.startsWith(MMPROJ_PREFIX) }
             ?.firstOrNull()
             ?.absolutePath
             .orEmpty()
@@ -211,8 +280,11 @@ class GenieXBrain(
             RuntimeIdValue.QAIRT -> GenieXSdk.PLUGIN_ID_QAIRT
             RuntimeIdValue.LLAMA_CPP -> GenieXSdk.PLUGIN_ID_LLAMA_CPP
         }
-        val status = sdk.registerPlugin(pluginId)
-        Log.i(TAG, "registerPlugin($pluginId) -> $status, version=${sdk.getPluginVersion(pluginId)}")
+        // init() already loads the bundled plugins; this call reports
+        // "dlopen failed: library qairt not found" because it wants a library
+        // path, not an id. Harmless — creation still routes to the plugin — so
+        // we only log the version, which is the useful part.
+        Log.i(TAG, "plugin $pluginId version=${sdk.getPluginVersion(pluginId)}")
     }
 
     /**
@@ -244,5 +316,9 @@ class GenieXBrain(
         const val CONTENT_TEXT = "text"
         const val MAX_TOKENS = 64
         const val CONTEXT_TOKENS = 1024
+        const val MMPROJ_PREFIX = "mmproj"
+
+        /** More than any model has, which is llama.cpp's idiom for "all of them". */
+        const val ALL_LAYERS = 99
     }
 }

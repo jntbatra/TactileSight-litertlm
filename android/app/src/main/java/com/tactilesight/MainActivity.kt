@@ -1,5 +1,6 @@
 package com.tactilesight
 
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.util.Log
@@ -18,6 +19,7 @@ import com.tactilesight.core.FrameSource
 import com.tactilesight.core.Orchestrator
 import com.tactilesight.databinding.ActivityMainBinding
 import com.tactilesight.frame.BundledCaptureSource
+import com.tactilesight.frame.DepthCoverage
 import com.tactilesight.frame.DepthRenderer
 import com.tactilesight.frame.FramePage
 import com.tactilesight.frame.FramePagerAdapter
@@ -136,27 +138,26 @@ class MainActivity : AppCompatActivity() {
 
     /** Show a frame's three streams. Works for any source — see [DepthRenderer]. */
     private fun showFrame(frame: Frame) {
+        // Trimmed to what depth can measure — the same crop the VLM is given,
+        // so the preview shows exactly what the brain sees.
+        val colour = DepthCoverage.cropToMeasurableRegion(frame.rgbJpeg).toBitmap()
+        val infrared = frame.irJpeg.toBitmap()
+        val depth = DepthRenderer.render(frame.depthMillimetres)
+
         pages.submit(
             listOf(
-                FramePage(
-                    getString(R.string.stream_rgb),
-                    getString(R.string.preview_rgb),
-                    frame.rgbJpeg.toBitmap(),
-                ),
-                FramePage(
-                    getString(R.string.stream_ir),
-                    getString(R.string.preview_ir),
-                    frame.irJpeg.toBitmap(),
-                ),
-                FramePage(
-                    getString(R.string.stream_depth),
-                    getString(R.string.preview_depth),
-                    DepthRenderer.render(frame.depthMillimetres),
-                ),
+                FramePage(label(R.string.stream_rgb, colour), getString(R.string.preview_rgb), colour),
+                FramePage(label(R.string.stream_ir, infrared), getString(R.string.preview_ir), infrared),
+                FramePage(label(R.string.stream_depth, depth), getString(R.string.preview_depth), depth),
             ),
         )
         buildDots(count = 3, selected = binding.framePager.currentItem)
     }
+
+    /** Name plus the dimensions actually on screen — so a crop is visible as a number. */
+    private fun label(nameRes: Int, bitmap: Bitmap?): String =
+        if (bitmap == null) getString(nameRes)
+        else "${getString(nameRes)} · ${bitmap.width}×${bitmap.height}"
 
     /** Three dots under the carousel; the current page is Qualcomm Blue. */
     private fun buildDots(count: Int, selected: Int) {

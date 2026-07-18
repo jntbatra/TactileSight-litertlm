@@ -53,12 +53,34 @@ Without `sdk.dir` you get `SDK location not found`.
 Models are 1–6 GB. They are **not** in the APK and **must not** be downloaded at the venue (we measured the hall network swinging between 0.3 and 15 MB/s with repeated drops — a 6 GB pull took hours and got killed).
 
 ```bash
-adb push <model-dir> /sdcard/Android/data/<pkg>/files/models/<engine>/
+adb push <bundle>/. /sdcard/Android/data/<pkg>/files/models/<engine>/
 ```
+
+⚠️ **Push the bundle's *contents*, note the trailing `/.`** — not the folder. `adb push <dir> <target>` creates the new subdirectory as `shell:ext_data_rw` mode 770, which the app's uid cannot traverse, so the model becomes invisible to the app that needs it. The engine directory is created *by the app*, so it stays app-owned and readable. Symptom if you get this wrong, and it does not name the real cause:
+
+```
+[plugins/qairt/src/vlm.cpp:88] No .bin LLM shards found in: …/files/models/geniex
+```
+
+One directory holds one bundle, which is why each backend gets its own (`geniex/`, `geniex-gguf/`).
 
 The app **scans that directory at startup** — adding a model is pushing a folder, no rebuild. Living in *external* files means an uninstall/reinstall doesn't wipe them.
 
 Exception: **GenieX downloads its own models** through its ModelManager. That's its design; leave it alone.
+
+### GenieX 0.3.1 QAIRT supports exactly one VLM architecture
+
+Measured 2026-07-18 by reading the shipped plugin, after the Qwen3-VL-4B bundle failed to load:
+
+```
+dispatch: no VLM factory matches model_id 'qwen3_vl_4b_instruct'
+```
+
+`libgeniex_plugin_qairt.so` exports a single VLM factory — `geniex::qwen2_5_vl::makeModel`, with `qwen2vl::Qwen2VLProcessor`. Text-only LLM factories are `qwen2_5` and `qwen3`.
+
+**So the NPU path needs a Qwen2.5-VL QAIRT bundle.** Our 4 GB Qwen3-VL-4B bundle is a different architecture (interleaved mRoPE) and cannot dispatch, no matter how it is pathed — this is a plugin registry limit, not a config mistake. Downloading it was not wasted: it is the right bundle for a later GenieX.
+
+Meanwhile `llama_cpp` has no such registry and **is the path that works today**: Gemma-4-E4B GGUF + `mmproj`, 93 tok/s prefill, 11.5 tok/s decode, 3.4 s TTFT, 28.7 s one-time load. It ships `libggml-hexagon.so`/`libggml-htp-v81.so` alongside `libggml-opencl.so`, so Hexagon through ggml is worth trying before assuming the NPU needs QAIRT at all.
 
 ### Secrets
 
@@ -108,7 +130,11 @@ Save yourself the afternoon:
   ```
 - **`pkill -f "<name>"` can kill your own shell** (its command line contains the pattern). Use `pkill -x <name>`.
 - **Depth holes are not an edge case.** Glass, dark and reflective surfaces read invalid. Test against a hole-heavy scene deliberately.
-- **RGB is 16:9, depth/IR are 4:3** — they are different sensors 24.9 mm apart, so part of the colour frame has no depth behind it. ~~Objects at the top/bottom of the RGB frame have no depth.~~ **Corrected 2026-07-18 — the vertical axis is not the constraint.** Depth's vertical FOV is **45.0°** against the 16:9 RGB's **36.5°**, so depth actually sees *more* vertically than the colour frame does. (This follows from the `fy == fx` correction below.) The real limit is **horizontal and asymmetric**: measured by projecting 1.28 M valid depth pixels from 8 captures into the colour frame, coverage is **x: 0.034–0.928, y: 0.025–0.955**. Roughly 3% lost on the left and **7% on the right** — that asymmetry *is* the 24.9 mm baseline. `calib.json`'s own note ("depth covers only the central vertical region") is wrong for the same reason. Handled in code by `DepthCoverage`, which crops the frame before the VLM sees it, so the VLM cannot describe something the phone can never measure. Note this fixes only the *systematic* mismatch — scattered depth holes inside the region remain, and stay the job of "distance unknown".
+- **RGB is 16:9, depth/IR are 4:3** — they are different sensors 24.9 mm apart, so part of the colour frame has no depth behind it. ~~Objects at the top/bottom of the RGB frame have no depth.~~ **Corrected 2026-07-18 — the vertical axis is not the constraint.** Depth's vertical FOV is **45.0°** against the 16:9 RGB's **36.5°**, so depth actually sees *more* vertically than the colour frame does. (This follows from the `fy == fx` correction below.) The real limit is **horizontal and asymmetric**: measured by projecting 1.28 M valid depth pixels from 8 captures into the colour frame, coverage is **x: 0.034–0.928, y: 0.025–0.955**. Roughly 3% lost on the left and **7% on the right** — that asymmetry *is* the 24.9 mm baseline. `calib.json`'s own note ("depth covers only the central vertical region") is wrong for the same reason. Handled in code by `DepthCoverage`, which crops the frame before the VLM sees it, so the VLM cannot describe something the phone can never measure — otherwise the two lanes disagree, and the user is told about an object that answers "distance unknown" forever.
+
+⚠️ **Treat the crop as an estimate, not a calibration.** It is derived from `color_intrinsics_640x480`, but the captures are **1280×720**, and the relationship between those two modes is not established — `calib.json`'s 720p block is known-wrong. Three automated alignment attempts on real captures failed (ORB 10 inliers, SIFT 4, template matching at noise), because RGB↔IR is cross-modal and the IR is sparse-speckled. A visual check on `scene_1_id013` puts the two horizontal FOVs within ~5–10% of each other, which is consistent, but that is eyeballing. **A checkerboard calibration at 1280×720 would settle it.** Until then the crop is a deliberately conservative trim: over-cropping costs a little periphery, under-cropping costs confidently unanswerable descriptions, and those are not symmetric.
+
+Note this addresses only the *systematic* mismatch — scattered depth holes inside the region remain, and stay the job of "distance unknown". **IR brightness predicts them**: measured on the live camera, mean IR at depth holes was 185 vs 55 at valid pixels (3.4×), confirming ADR-0013's "IR saturation doubles as a depth-confidence signal".
 - **`calib.json`'s 1280×720 colour intrinsics are wrong** (`fy` assumes a stretch; 16:9 is a crop, so `fy` should equal `fx`). Irrelevant for the IR path — it needs no colour intrinsics — but don't build RGB↔depth projection on it without a proper checkerboard calibration.
 
 ---

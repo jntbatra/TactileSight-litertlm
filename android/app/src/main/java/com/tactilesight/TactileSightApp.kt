@@ -43,18 +43,27 @@ class TactileSightApp : Application() {
      * surfaces as a spoken fallback rather than a crash at launch.
      */
     private fun resolveBrain(): SemanticBrain {
-        val bundles = modelStore.available(ModelStore.Engine.GENIEX)
+        // GGUF first: GenieX 0.3.1's QAIRT plugin carries exactly one VLM
+        // factory (qwen2_5_vl), so a QAIRT bundle for any other architecture
+        // fails to dispatch — our Qwen3-VL-4B bundle does, with
+        //   "no VLM factory matches model_id 'qwen3_vl_4b_instruct'".
+        // llama_cpp has no such registry and is the path that has actually
+        // produced tokens on this device. Reaching the NPU needs a Qwen2.5-VL
+        // QAIRT bundle; until one is staged, GGUF is the working brain.
+        val bundle = ENGINE_PREFERENCE
+            .firstNotNullOfOrNull { modelStore.available(it).firstOrNull() }
 
-        if (bundles.isEmpty()) {
+        if (bundle == null) {
             Log.w(
                 TAG,
-                "no GenieX model in ${modelStore.directoryFor(ModelStore.Engine.GENIEX)} " +
-                    "— falling back to the stub brain",
+                "no model in " +
+                    ENGINE_PREFERENCE.joinToString { modelStore.directoryFor(it).path } +
+                    " — falling back to the stub brain",
             )
             return StubBrain()
         }
 
-        return GenieXBrain(context = this, modelDir = bundles.first())
+        return GenieXBrain(context = this, modelDir = bundle)
     }
 
     /**
@@ -72,5 +81,11 @@ class TactileSightApp : Application() {
 
     private companion object {
         const val TAG = "TactileSightApp"
+
+        /** First engine with a bundle staged wins. */
+        val ENGINE_PREFERENCE = listOf(
+            ModelStore.Engine.GENIEX_GGUF,
+            ModelStore.Engine.GENIEX,
+        )
     }
 }
