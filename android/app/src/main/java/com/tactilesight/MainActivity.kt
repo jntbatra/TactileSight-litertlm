@@ -6,12 +6,16 @@ import android.util.Log
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
+import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import androidx.viewpager2.widget.ViewPager2
 import com.tactilesight.core.Orchestrator
 import com.tactilesight.databinding.ActivityMainBinding
 import com.tactilesight.frame.BundledCaptureSource
+import com.tactilesight.frame.FramePage
+import com.tactilesight.frame.FramePagerAdapter
 import com.tactilesight.frame.FrameSourceKind
 import com.tactilesight.speech.SarvamSpeechIO
 import kotlinx.coroutines.launch
@@ -30,6 +34,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var frames: BundledCaptureSource
     private lateinit var orchestrator: Orchestrator
+    private val pages = FramePagerAdapter()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -44,6 +49,7 @@ class MainActivity : AppCompatActivity() {
             speech = SarvamSpeechIO(cacheDir),
         )
 
+        setUpCarousel()
         setUpSourcePicker()
         setUpScenePicker()
 
@@ -105,14 +111,66 @@ class MainActivity : AppCompatActivity() {
             try {
                 val sceneId = frames.selectedSceneId
                 val frame = frames.load(sceneId)
-                binding.rgbPreview.setImageBitmap(frame.rgbJpeg.toBitmap())
-                binding.irPreview.setImageBitmap(frame.irJpeg.toBitmap())
-                binding.depthPreview.setImageBitmap(frames.depthPreview(sceneId).toBitmap())
+                pages.submit(
+                    listOf(
+                        FramePage(
+                            getString(R.string.stream_rgb),
+                            getString(R.string.preview_rgb),
+                            frame.rgbJpeg.toBitmap(),
+                        ),
+                        FramePage(
+                            getString(R.string.stream_ir),
+                            getString(R.string.preview_ir),
+                            frame.irJpeg.toBitmap(),
+                        ),
+                        FramePage(
+                            getString(R.string.stream_depth),
+                            getString(R.string.preview_depth),
+                            frames.depthPreview(sceneId).toBitmap(),
+                        ),
+                    ),
+                )
+                buildDots(count = 3, selected = binding.framePager.currentItem)
             } catch (e: Exception) {
                 Log.e(TAG, "preview failed", e)
             }
         }
     }
+
+    private fun setUpCarousel() {
+        binding.framePager.adapter = pages
+        binding.framePager.registerOnPageChangeCallback(
+            object : ViewPager2.OnPageChangeCallback() {
+                override fun onPageSelected(position: Int) {
+                    buildDots(count = pages.itemCount, selected = position)
+                }
+            },
+        )
+    }
+
+    /** Three dots under the carousel; the current page is Qualcomm Blue. */
+    private fun buildDots(count: Int, selected: Int) {
+        val dots = binding.dots
+        if (dots.childCount != count) {
+            dots.removeAllViews()
+            repeat(count) { index ->
+                dots.addView(
+                    View(this).apply {
+                        setBackgroundResource(R.drawable.dot_indicator)
+                        layoutParams = LinearLayout.LayoutParams(dotSize, dotSize).apply {
+                            marginStart = if (index == 0) 0 else dotGap
+                        }
+                    },
+                )
+            }
+        }
+        for (index in 0 until dots.childCount) {
+            dots.getChildAt(index).isSelected = index == selected
+        }
+    }
+
+    private val dotSize by lazy { (8 * resources.displayMetrics.density).toInt() }
+    private val dotGap by lazy { (8 * resources.displayMetrics.density).toInt() }
 
     private fun onPress() {
         binding.describeButton.isEnabled = false

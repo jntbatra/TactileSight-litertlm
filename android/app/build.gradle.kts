@@ -11,8 +11,13 @@ val localProps = Properties().apply {
     val f = rootProject.file("local.properties")
     if (f.exists()) f.inputStream().use { load(it) }
 }
+// Tolerate a quoted value — local.properties is hand-edited, and stray quotes
+// would otherwise be baked into the key and fail every request with a 401.
 val sarvamApiKey: String =
-    localProps.getProperty("sarvam.api.key") ?: System.getenv("SARVAM_API_KEY") ?: ""
+    (localProps.getProperty("sarvam.api.key") ?: System.getenv("SARVAM_API_KEY") ?: "")
+        .trim()
+        .removeSurrounding("\"")
+        .removeSurrounding("'")
 
 android {
     namespace = "com.tactilesight"
@@ -66,6 +71,7 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    implementation("androidx.viewpager2:viewpager2:1.1.0")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")

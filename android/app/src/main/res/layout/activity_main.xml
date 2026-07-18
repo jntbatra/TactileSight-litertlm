@@ -1,12 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Content scrolls, the press target stays pinned: the button must never be
+     pushed off-screen by a long spoken sentence or a shorter device. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="@color/surface"
+    android:fitsSystemWindows="true"
     android:paddingHorizontal="24dp"
     android:paddingTop="32dp"
     android:paddingBottom="24dp">
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true"
+        android:scrollbars="none">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
 
     <TextView
         android:layout_width="wrap_content"
@@ -51,41 +66,31 @@
         android:layout_marginTop="4dp"
         android:layout_marginBottom="20dp" />
 
-    <!-- The triplet, so it is obvious this is real band data and not a photo. -->
+    <!-- The triplet as a carousel: colour, infrared, depth. Wraps to the image
+         rather than stretching to fill, so the card stays the size of what it
+         shows. -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:orientation="horizontal"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
         android:background="@drawable/bg_card"
-        android:padding="12dp"
-        android:baselineAligned="false">
+        android:padding="12dp">
 
-        <ImageView
-            android:id="@+id/rgbPreview"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="2"
-            android:scaleType="centerCrop"
-            android:contentDescription="@string/preview_rgb" />
+        <!-- Explicit height: ViewPager2 requires its pages to be match_parent,
+             so the card is sized here rather than by the image. -->
+        <androidx.viewpager2.widget.ViewPager2
+            android:id="@+id/framePager"
+            android:layout_width="match_parent"
+            android:layout_height="286dp" />
 
-        <ImageView
-            android:id="@+id/irPreview"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:layout_marginStart="8dp"
-            android:scaleType="centerCrop"
-            android:contentDescription="@string/preview_ir" />
-
-        <ImageView
-            android:id="@+id/depthPreview"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:layout_marginStart="8dp"
-            android:scaleType="centerCrop"
-            android:contentDescription="@string/preview_depth" />
+        <LinearLayout
+            android:id="@+id/dots"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="14dp"
+            android:orientation="horizontal"
+            android:importantForAccessibility="no" />
     </LinearLayout>
 
     <TextView
@@ -97,6 +102,9 @@
         android:text="@string/status_ready"
         android:textColor="@color/on_surface"
         android:textSize="16sp" />
+
+    </LinearLayout>
+    </ScrollView>
 
     <!-- Band button 1. Full-width and tall: findable by touch alone. -->
     <Button

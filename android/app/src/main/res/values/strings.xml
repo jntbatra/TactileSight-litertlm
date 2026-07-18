@@ -9,6 +9,10 @@
     <string name="describe">Describe</string>
     <string name="describe_content_description">Describe what is in front of me</string>
 
+    <string name="stream_rgb">Colour · 1280×720</string>
+    <string name="stream_ir">Infrared · 640×480</string>
+    <string name="stream_depth">Depth · 640×480</string>
+
     <string name="preview_rgb">Colour image from the band camera</string>
     <string name="preview_ir">Infrared image from the band camera</string>
     <string name="preview_depth">Depth image from the band camera</string>
