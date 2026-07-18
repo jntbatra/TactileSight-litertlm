@@ -35,6 +35,10 @@ class TactileSightApp : Application() {
 
     private val brainLock = Any()
 
+    /** The configuration the resident brain was built for — see [applyMode]. */
+    @Volatile
+    private var loadedConfiguration: String? = null
+
     val settings by lazy { Settings(this) }
 
     override fun onCreate() {
@@ -57,8 +61,24 @@ class TactileSightApp : Application() {
         if (mode != requested) {
             Log.w(TAG, "$requested blocked by privacy mode — using $mode")
         }
+
+        // Rebuild only when the configuration actually changed. Without this,
+        // anything that calls applyMode — including a text-field callback that
+        // fires on setText — drops the resident model and forces a 30–60 s
+        // reload of several gigabytes. Hard rule #1: load once and keep it.
+        val key = configurationKey(mode)
+        if (key == loadedConfiguration) return
+        loadedConfiguration = key
+
         switchBrain(brainFor(mode))
         Log.i(TAG, "brain = ${brain.name} (mode=$mode)")
+    }
+
+    /** Everything that decides which brain we need. Same key, same brain. */
+    private fun configurationKey(mode: BrainMode): String = when (mode) {
+        BrainMode.ON_DEVICE_NPU, BrainMode.ON_DEVICE_GPU -> mode.name
+        BrainMode.PRIVATE_SERVER -> "${mode.name}|${settings.privateServerUrl}"
+        BrainMode.CLOUD -> "${mode.name}|${settings.cloudUrl}|${settings.cloudModel}"
     }
 
     /**
@@ -84,7 +104,11 @@ class TactileSightApp : Application() {
                 Log.w(TAG, "no cloud model set — falling back to the stub brain")
                 StubBrain()
             } else {
-                ImagineBrain(baseUrl = settings.cloudUrl, model = model)
+                ImagineBrain(
+                    baseUrl = settings.cloudUrl,
+                    model = model,
+                    promptOverride = { settings.customPrompt },
+                )
             }
         }
     }
@@ -115,7 +139,11 @@ class TactileSightApp : Application() {
             Log.w(TAG, "no bundle for $preferred — using $engine instead")
         }
 
-        return GenieXBrain(context = this, modelDir = modelStore.available(engine).first())
+        return GenieXBrain(
+            context = this,
+            modelDir = modelStore.available(engine).first(),
+            promptOverride = { settings.customPrompt },
+        )
     }
 
     /**

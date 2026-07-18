@@ -40,6 +40,7 @@ class ImagineBrain(
     private val baseUrl: String,
     private val model: String,
     private val apiKey: String = BuildConfig.CIRRASCALE_API_KEY,
+    private val promptOverride: () -> String? = { null },
 ) : SemanticBrain {
 
     override val name: String = "Cloud AI 100 ($model)"
@@ -57,7 +58,12 @@ class ImagineBrain(
                 Base64.encodeToString(jpeg, Base64.NO_WRAP)
 
             val content = JSONArray()
-                .put(JSONObject().put("type", "text").put("text", VlmPrompt.forRequest(question)))
+                .put(
+                    JSONObject().put("type", "text").put(
+                        "text",
+                        promptOverride()?.takeIf { it.isNotBlank() } ?: VlmPrompt.forRequest(question),
+                    ),
+                )
                 .put(
                     JSONObject()
                         .put("type", "image_url")

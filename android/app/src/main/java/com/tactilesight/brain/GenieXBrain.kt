@@ -49,6 +49,8 @@ class GenieXBrain(
     private val modelDir: File,
     runtime: RuntimeIdValue? = null,
     computeUnit: ComputeUnitValue? = null,
+    /** A prompt typed in the app; null or blank falls back to [VlmPrompt]. */
+    private val promptOverride: () -> String? = { null },
 ) : SemanticBrain {
 
     /**
@@ -97,8 +99,31 @@ class GenieXBrain(
         val computeUnit: String,
     )
 
-    override suspend fun describe(frame: Frame, question: String?): Answer {
+    override suspend fun describe(frame: Frame, question: String?): Answer =
+        describeWith(frame, promptOverride()?.takeIf { it.isNotBlank() } ?: VlmPrompt.forRequest(question))
+
+    /**
+     * Describe [frame] with an explicit [prompt], bypassing [VlmPrompt].
+     *
+     * Exists so prompt wording can be **measured rather than argued about**:
+     * the wording is load-bearing (see VlmPrompt) and every change to it has so
+     * far been justified by anecdote. This is the seam that lets two variants
+     * run over the same captures and be scored.
+     */
+    suspend fun describeWith(frame: Frame, prompt: String): Answer {
         val model = load()
+
+        // Every press is a fresh look at the world, not the next turn of a
+        // conversation. Without this the pipeline can carry state between
+        // presses and blend the previous scene into the current answer — which
+        // reads as hallucination rather than as a stale cache, and is hard to
+        // catch because the sentence still sounds entirely plausible.
+        //
+        // QAIRT appears not to accumulate (it reports n_past=0 and repeats
+        // byte-identical answers), but that is its behaviour, not our
+        // guarantee, and llama_cpp need not match it. Cheap to make certain.
+        model.reset()
+
         val imagePath = writeFrameForVlm(frame)
 
         try {
@@ -107,7 +132,7 @@ class GenieXBrain(
                     "user",
                     listOf(
                         VlmContent(CONTENT_IMAGE, imagePath.absolutePath),
-                        VlmContent(CONTENT_TEXT, VlmPrompt.forRequest(question)),
+                        VlmContent(CONTENT_TEXT, prompt),
                     ),
                 ),
             )
@@ -305,9 +330,13 @@ class GenieXBrain(
 
     /** Only ever called on engine/model switch. Never on Activity recreation. */
     override fun close() {
+        // Says whether a model was actually resident, because "released" on a
+        // brain that never loaded reads identically in the log to a real
+        // release — and this path had never once been observed to run.
+        val wasLoaded = vlm != null
         vlm?.close()
         vlm = null
-        Log.i(TAG, "released")
+        Log.i(TAG, if (wasLoaded) "released $name — model was resident" else "closed $name — never loaded")
     }
 
     private companion object {

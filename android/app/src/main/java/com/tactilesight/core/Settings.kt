@@ -39,6 +39,20 @@ class Settings(context: Context) {
         set(value) = prefs.edit().putString(KEY_CLOUD_MODEL, value.trim()).apply()
 
     /**
+     * A prompt typed in the app, overriding [com.tactilesight.brain.VlmPrompt].
+     * Blank means "use the built-in one".
+     *
+     * A dev affordance: the wording is load-bearing and tuning it by rebuilding
+     * is slow enough that it does not get done. Note this deliberately does
+     * **not** apply to the private-server mode — there the prompt lives
+     * server-side by contract, and a second prompt on the phone is exactly the
+     * drift TEAM.md forbids.
+     */
+    var customPrompt: String
+        get() = prefs.getString(KEY_PROMPT, "").orEmpty()
+        set(value) = prefs.edit().putString(KEY_PROMPT, value).apply()
+
+    /**
      * When on, imagery must not leave the device to a third party (hard rule
      * #7). Enforced in brain resolution, not in the UI — see [effectiveMode].
      */
@@ -78,6 +92,7 @@ class Settings(context: Context) {
         const val KEY_CLOUD_URL = "cloud_url"
         const val KEY_CLOUD_MODEL = "cloud_model"
         const val KEY_PRIVACY = "privacy_mode"
+        const val KEY_PROMPT = "custom_prompt"
 
         /** The laptop tier's default port, per server/README. */
         const val DEFAULT_PRIVATE_URL = "http://192.168.1.100:8000"

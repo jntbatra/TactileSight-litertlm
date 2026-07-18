@@ -96,6 +96,44 @@
         android:textColorHint="@color/on_surface_muted"
         android:textSize="14sp" />
 
+    <TextView
+        style="@style/TextAppearance.TactileSight.Label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:labelFor="@id/promptField"
+        android:text="@string/label_prompt" />
+
+    <!-- Dev affordance: the prompt wording is load-bearing, and rebuilding to
+         try a variant is slow enough that it does not get done. Blank restores
+         the built-in prompt. -->
+    <EditText
+        android:id="@+id/promptField"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:gravity="top|start"
+        android:hint="@string/hint_prompt"
+        android:importantForAutofill="no"
+        android:inputType="textMultiLine"
+        android:maxLines="6"
+        android:minLines="3"
+        android:textColor="@color/on_surface"
+        android:textColorHint="@color/on_surface_muted"
+        android:textSize="13sp" />
+
+    <Button
+        android:id="@+id/resetPromptButton"
+        style="?android:attr/borderlessButtonStyle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="end"
+        android:minWidth="0dp"
+        android:paddingHorizontal="8dp"
+        android:text="@string/reset_prompt"
+        android:textColor="@color/qualcomm_blue"
+        android:textSize="13sp" />
+
     <!-- Privacy is a switch, not a menu: it must be obvious at a glance
          whether imagery can leave the device. -->
     <androidx.appcompat.widget.SwitchCompat

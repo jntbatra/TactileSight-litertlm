@@ -14,6 +14,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import androidx.viewpager2.widget.ViewPager2
+import com.tactilesight.brain.GenieXBrain
+import com.tactilesight.brain.PromptBenchmark
+import com.tactilesight.brain.VlmPrompt
 import com.tactilesight.core.BrainMode
 import com.tactilesight.core.BrowsableFrameSource
 import com.tactilesight.core.Frame
@@ -72,6 +75,9 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.describeButton.setOnClickListener { onPress() }
+
+        // Dev affordance, not a feature: adb shell am start -n <pkg>/.MainActivity --ez sweep true
+        if (intent?.getBooleanExtra(EXTRA_SWEEP, false) == true) runPromptSweep()
     }
 
     private fun setUpSourcePicker() {
@@ -158,6 +164,23 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // Show the prompt that will actually be sent, so it can be read and
+        // edited rather than guessed at. Stored blank whenever it matches the
+        // built-in one — that way a later improvement to VlmPrompt still
+        // reaches anyone who never customised it, instead of being frozen out
+        // by a copy of today's wording sitting in their preferences.
+        binding.promptField.setText(app.settings.customPrompt.ifBlank { VlmPrompt.describe() })
+        binding.promptField.doAfterTextChanged { text ->
+            val typed = text?.toString().orEmpty()
+            app.settings.customPrompt = if (typed.trim() == VlmPrompt.describe()) "" else typed
+        }
+
+        binding.resetPromptButton.setOnClickListener {
+            app.settings.customPrompt = ""
+            binding.promptField.setText(VlmPrompt.describe())
+            toast(getString(R.string.reset_prompt))
+        }
+
         showEndpointFor(app.settings.effectiveMode)
         showBrain()
     }
@@ -184,6 +207,25 @@ class MainActivity : AppCompatActivity() {
     private fun showBrain() {
         val app = application as TactileSightApp
         binding.status.text = getString(R.string.status_brain, app.brain.name)
+    }
+
+    /** Score two prompt wordings over the bundled captures — see PromptBenchmark. */
+    private fun runPromptSweep() {
+        val brain = (application as TactileSightApp).brain as? GenieXBrain ?: run {
+            Log.w(TAG, "prompt sweep needs an on-device brain, got ${(application as TactileSightApp).brain.name}")
+            return
+        }
+        val browsable = frames as? BrowsableFrameSource ?: return
+
+        binding.status.text = getString(R.string.status_working)
+        lifecycleScope.launch {
+            try {
+                PromptBenchmark.run(brain, browsable)
+                binding.status.text = "Prompt sweep done — see logcat"
+            } catch (e: Exception) {
+                Log.e(TAG, "prompt sweep failed", e)
+            }
+        }
     }
 
     private fun toast(message: String) =
@@ -312,5 +354,6 @@ class MainActivity : AppCompatActivity() {
 
     private companion object {
         const val TAG = "MainActivity"
+        const val EXTRA_SWEEP = "sweep"
     }
 }
