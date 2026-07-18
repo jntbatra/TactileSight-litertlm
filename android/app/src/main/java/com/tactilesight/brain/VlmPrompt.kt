@@ -24,6 +24,10 @@ package com.tactilesight.brain
  *   a walking user needs to hear about.
  * - *"Only describe what is really there"* — stops it inventing people and
  *   animals in empty scenes.
+ * - *"Read out any sign, board or written text"* — a description that names a
+ *   door but not the "WASHROOM" written on it is scenery, not navigation.
+ *   Measured on real captures: Gemma read the sign, Qwen3-VL only spotted one,
+ *   so it is worth asking for explicitly and worth re-checking per model.
  * - *"Do not mention distance"* — the VLM cannot measure. Distance is appended
  *   by the phone from depth (ADR-0013). This line is a hard rule, not a style
  *   preference.
@@ -36,7 +40,9 @@ object VlmPrompt {
     /** No question — describe what is ahead. */
     fun describe(): String =
         "In one short sentence, say what is ahead, including any objects or animals on the floor, " +
-            "and whether each is on the left, center, or right. Name the things directly, no preamble. " +
+            "and whether each is on the left, center, or right. " +
+            "Read out any sign, board or written text you can see. " +
+            "Name the things directly, no preamble. " +
             "Only describe what is really there. Do not mention distance. Answer in English."
 
     /** The user asked something specific about the scene. */

@@ -13,11 +13,21 @@ val localProps = Properties().apply {
 }
 // Tolerate a quoted value — local.properties is hand-edited, and stray quotes
 // would otherwise be baked into the key and fail every request with a 401.
-val sarvamApiKey: String =
-    (localProps.getProperty("sarvam.api.key") ?: System.getenv("SARVAM_API_KEY") ?: "")
+fun secret(property: String, environment: String): String =
+    (localProps.getProperty(property) ?: System.getenv(environment) ?: "")
         .trim()
         .removeSurrounding("\"")
         .removeSurrounding("'")
+
+val sarvamApiKey: String = secret("sarvam.api.key", "SARVAM_API_KEY")
+
+// Qualcomm Cloud AI 100, via Cirrascale's Imagine API. Held on the phone so
+// the cloud tier does not depend on our laptop being up and tunnelled — the
+// three destinations must fail independently. It is extractable from the APK
+// by anyone holding it, which is acceptable for an MVP only the team installs
+// and a key rotated after the event, but it is a deliberate trade, not an
+// oversight.
+val cirrascaleApiKey: String = secret("cirrascale.api.key", "CIRRASCALE_API_KEY")
 
 android {
     namespace = "com.tactilesight"
@@ -31,6 +41,7 @@ android {
         versionName = "0.1"
 
         buildConfigField("String", "SARVAM_API_KEY", "\"$sarvamApiKey\"")
+        buildConfigField("String", "CIRRASCALE_API_KEY", "\"$cirrascaleApiKey\"")
 
         // QAIRT/Hexagon ships arm64 only; other ABIs would bloat the APK with
         // libs that cannot run the model anyway.

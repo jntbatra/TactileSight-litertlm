@@ -145,6 +145,16 @@ class MainActivity : AppCompatActivity() {
             val mode = app.settings.effectiveMode
             if (mode.sendsImageryOffDevice) {
                 app.settings.setUrlFor(mode, text?.toString().orEmpty())
+                app.applyMode(mode)
+                showBrain()
+            }
+        }
+
+        binding.modelField.doAfterTextChanged { text ->
+            if (app.settings.effectiveMode == BrainMode.CLOUD) {
+                app.settings.cloudModel = text?.toString().orEmpty()
+                app.applyMode(BrainMode.CLOUD)
+                showBrain()
             }
         }
 
@@ -156,9 +166,17 @@ class MainActivity : AppCompatActivity() {
         val app = application as TactileSightApp
         binding.endpointField.visibility =
             if (mode.sendsImageryOffDevice) View.VISIBLE else View.GONE
-        val saved = app.settings.urlFor(mode)
-        if (binding.endpointField.text.toString() != saved) {
-            binding.endpointField.setText(saved)
+        // Only the cloud needs a model named: the private server picks its own
+        // via TS_VLM_BACKEND, and on-device uses whatever is staged.
+        binding.modelField.visibility =
+            if (mode == BrainMode.CLOUD) View.VISIBLE else View.GONE
+
+        val savedUrl = app.settings.urlFor(mode)
+        if (binding.endpointField.text.toString() != savedUrl) {
+            binding.endpointField.setText(savedUrl)
+        }
+        if (binding.modelField.text.toString() != app.settings.cloudModel) {
+            binding.modelField.setText(app.settings.cloudModel)
         }
     }
 

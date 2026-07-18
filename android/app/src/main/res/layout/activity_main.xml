@@ -80,6 +80,22 @@
         android:textColorHint="@color/on_surface_muted"
         android:textSize="14sp" />
 
+    <!-- Cloud only: which model the endpoint serves. Not pinned in code
+         because GET /v2/models is the authority and what is deployed there
+         can change without warning. -->
+    <EditText
+        android:id="@+id/modelField"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:hint="@string/hint_model"
+        android:importantForAutofill="no"
+        android:inputType="text"
+        android:maxLines="1"
+        android:textColor="@color/on_surface"
+        android:textColorHint="@color/on_surface_muted"
+        android:textSize="14sp" />
+
     <!-- Privacy is a switch, not a menu: it must be obvious at a glance
          whether imagery can leave the device. -->
     <androidx.appcompat.widget.SwitchCompat

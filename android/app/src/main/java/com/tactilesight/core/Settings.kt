@@ -24,10 +24,19 @@ class Settings(context: Context) {
         get() = prefs.getString(KEY_PRIVATE_URL, DEFAULT_PRIVATE_URL).orEmpty()
         set(value) = prefs.edit().putString(KEY_PRIVATE_URL, value.trim()).apply()
 
-    /** Qualcomm Cloud AI 100. */
+    /** Qualcomm Cloud AI 100 — Cirrascale's INFERENCE_CLOUD_ENDPOINT. */
     var cloudUrl: String
-        get() = prefs.getString(KEY_CLOUD_URL, "").orEmpty()
+        get() = prefs.getString(KEY_CLOUD_URL, DEFAULT_CLOUD_URL).orEmpty()
         set(value) = prefs.edit().putString(KEY_CLOUD_URL, value.trim()).apply()
+
+    /**
+     * Which model the cloud serves. Editable because it is not ours to pin —
+     * `GET /v2/models` is the authority, and what is deployed there can change
+     * without warning.
+     */
+    var cloudModel: String
+        get() = prefs.getString(KEY_CLOUD_MODEL, "").orEmpty()
+        set(value) = prefs.edit().putString(KEY_CLOUD_MODEL, value.trim()).apply()
 
     /**
      * When on, imagery must not leave the device to a third party (hard rule
@@ -67,9 +76,13 @@ class Settings(context: Context) {
         const val KEY_MODE = "brain_mode"
         const val KEY_PRIVATE_URL = "private_server_url"
         const val KEY_CLOUD_URL = "cloud_url"
+        const val KEY_CLOUD_MODEL = "cloud_model"
         const val KEY_PRIVACY = "privacy_mode"
 
         /** The laptop tier's default port, per server/README. */
         const val DEFAULT_PRIVATE_URL = "http://192.168.1.100:8000"
+
+        /** Cirrascale's published Imagine API endpoint. */
+        const val DEFAULT_CLOUD_URL = "https://aisuite.cirrascale.com/apis/v2"
     }
 }

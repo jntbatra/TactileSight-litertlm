@@ -4,6 +4,7 @@ import android.app.Application
 import android.util.Log
 import com.tactilesight.brain.CloudBrain
 import com.tactilesight.brain.GenieXBrain
+import com.tactilesight.brain.ImagineBrain
 import com.tactilesight.brain.ModelStore
 import com.tactilesight.brain.StubBrain
 import com.tactilesight.core.BrainMode
@@ -67,13 +68,22 @@ class TactileSightApp : Application() {
      */
     private fun brainFor(mode: BrainMode): SemanticBrain = when (mode) {
         BrainMode.ON_DEVICE -> onDeviceBrain()
-        BrainMode.PRIVATE_SERVER, BrainMode.CLOUD -> {
-            val url = settings.urlFor(mode)
-            if (url.isBlank()) {
-                Log.w(TAG, "no URL set for $mode — falling back to the stub brain")
+
+        // Our own server, speaking our frozen /v1/describe contract.
+        BrainMode.PRIVATE_SERVER -> settings.privateServerUrl.ifBlank {
+            Log.w(TAG, "no URL set for $mode — falling back to the stub brain")
+            return StubBrain()
+        }.let { CloudBrain(baseUrl = it, name = mode.displayName) }
+
+        // Cirrascale's Imagine API, reached directly. Deliberately not routed
+        // through our server: the three destinations must fail independently.
+        BrainMode.CLOUD -> {
+            val model = settings.cloudModel
+            if (model.isBlank()) {
+                Log.w(TAG, "no cloud model set — falling back to the stub brain")
                 StubBrain()
             } else {
-                CloudBrain(baseUrl = url, name = mode.displayName)
+                ImagineBrain(baseUrl = settings.cloudUrl, model = model)
             }
         }
     }
