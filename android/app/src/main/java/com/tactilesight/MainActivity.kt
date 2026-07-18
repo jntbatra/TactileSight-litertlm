@@ -14,7 +14,10 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import androidx.viewpager2.widget.ViewPager2
+import com.geniex.sdk.bean.ComputeUnitValue
+import com.geniex.sdk.bean.RuntimeIdValue
 import com.tactilesight.brain.GenieXBrain
+import com.tactilesight.brain.ModelStore
 import com.tactilesight.brain.PromptBenchmark
 import com.tactilesight.brain.VlmPrompt
 import com.tactilesight.core.BrainMode
@@ -84,6 +87,10 @@ class MainActivity : AppCompatActivity() {
 
         // Dev affordance, not a feature: adb shell am start -n <pkg>/.MainActivity --ez sweep true
         if (intent?.getBooleanExtra(EXTRA_SWEEP, false) == true) runPromptSweep()
+
+        // adb shell am start -n <pkg>/.MainActivity --ez hexagon true
+        // Answers one question: will llama_cpp drive a GGUF on the Hexagon NPU?
+        if (intent?.getBooleanExtra(EXTRA_HEXAGON, false) == true) runHexagonProbe()
     }
 
     private fun setUpSourcePicker() {
@@ -261,6 +268,48 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Can llama_cpp run a GGUF on Hexagon rather than Adreno?
+     *
+     * The plugin ships `libggml-hexagon.so` and logs "Reacquiring HTP sessions
+     * before llama.cpp load", so the path exists; whether it loads a 5 GB q4_0
+     * VLM is another matter. Worth knowing, because it is the only route that
+     * puts a community GGUF on the NPU — QAIRT will only take architectures it
+     * has a compiled factory for.
+     */
+    private fun runHexagonProbe() {
+        val app = application as TactileSightApp
+        val bundle = ModelStore(this)
+            .available(ModelStore.Engine.GENIEX_GGUF)
+            .firstOrNull() ?: run {
+            Log.w(TAG, "hexagon probe: no GGUF staged")
+            return
+        }
+
+        binding.status.text = getString(R.string.status_working)
+        lifecycleScope.launch {
+            delay(SETTLE_BEFORE_SWEEP_MS)
+            val brain = GenieXBrain(
+                context = applicationContext,
+                modelDir = bundle,
+                runtime = RuntimeIdValue.LLAMA_CPP,
+                computeUnit = ComputeUnitValue.NPU,
+            )
+            try {
+                // Replace the resident brain so we never hold two models.
+                app.switchBrain(brain)
+                val browsable = frames as BrowsableFrameSource
+                val frame = browsable.load(browsable.sceneIds.first())
+                val answer = brain.describe(frame)
+                Log.i(TAG, "hexagon probe OK: ${answer.spoken}")
+                binding.status.text = "Hexagon probe: ${answer.spoken}"
+            } catch (e: Exception) {
+                Log.e(TAG, "hexagon probe FAILED", e)
+                binding.status.text = "Hexagon probe failed — see logcat"
+            }
+        }
+    }
+
     private fun toast(message: String) =
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
 
@@ -402,5 +451,6 @@ class MainActivity : AppCompatActivity() {
         const val TAG = "MainActivity"
         const val EXTRA_SWEEP = "sweep"
         const val SETTLE_BEFORE_SWEEP_MS = 8_000L
+        const val EXTRA_HEXAGON = "hexagon"
     }
 }

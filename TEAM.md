@@ -124,6 +124,28 @@ GET  /health        →  {status, backend}
 - Adding a VLM = **one backend class** implementing `generate(image_bytes, prompt) -> str`. Selected by `TS_VLM_BACKEND`.
 - `server/test_app.py` green (`TS_VLM_BACKEND=mock`) **is** the compatibility check between tracks.
 
+### Checking a private server from the phone
+
+The endpoint is typed into the app and changes constantly (a tunnel URL changes on every restart), so "is it reachable, and what is behind it" has to be answerable **from the phone**, not from a laptop terminal. The app has a **Check** button next to the endpoint field for exactly this.
+
+It probes two shapes, because two different things get pointed at that field:
+
+| probe | server | meaning |
+|---|---|---|
+| `GET /health` → `{status, backend}` | **our** `server/app.py` | ready — the phone can describe |
+| `GET /v1/models` → `{data:[{id,...}]}` | an OpenAI-compatible server (LM Studio, llama-server, vLLM) | reachable, but **it does not speak our contract** |
+
+The second case is the trap. An OpenAI-compatible server answers `/v1/models` happily and then 404s on `POST /v1/describe`, so the endpoint looks alive and every press fails. If you are pointing the phone at LM Studio directly, either run `server/app.py` in front of it (`TS_VLM_BACKEND=openai`, `TS_OPENAI_BASE_URL=http://<lm-studio>/v1`) or use the Cloud mode, which speaks OpenAI chat/completions natively.
+
+Example of the second case, from LM Studio serving four models:
+
+```json
+{"data":[{"id":"google/gemma-4-12b-qat","object":"model"},
+         {"id":"qwen/qwen3.5-9b","object":"model"}, ...]}
+```
+
+Note `gemma-4-12b-qat` — bigger than anything the phone can hold, which is the point of the private-server tier.
+
 ---
 
 ## Hard rules
