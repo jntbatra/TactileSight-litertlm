@@ -1,0 +1,27 @@
+# Android build outputs
+android/.gradle/
+android/.kotlin/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/captures/
+*.apk
+*.aab
+
+# Cloud server (Python)
+server/.venv/
+server/models/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Local platform-tools (adb) download — machine-specific, not source
+tools/
+
+# CUDA toolkit installer(s) — large, machine-specific
+*.deb
+
+# OS / editor
+.DS_Store
+*.swp

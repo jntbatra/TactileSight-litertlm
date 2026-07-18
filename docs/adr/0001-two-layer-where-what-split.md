@@ -1,0 +1,3 @@
+# Two-layer split: Haptic Band owns "where", Semantic Module owns "what"
+
+TactileSight is split into two layers that never re-derive each other's job: the Haptic Band renders depth as touch to convey spatial geometry (*where* obstacles are), and the phone-based Semantic Module identifies objects (*what* they are). We chose this over a full phone-camera replacement (which would lose hands-free, hearing-free continuous spatial awareness) and over a redundant module that re-computes distance (wasteful duplication of sensing and compute). The band's continuous haptic channel and the module's on-demand semantic channel are complementary, not overlapping.

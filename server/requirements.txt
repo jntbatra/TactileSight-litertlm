@@ -1,0 +1,12 @@
+# Server core — enough to run the mock and openai backends tonight on any laptop.
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pydantic==2.9.2
+requests==2.32.3
+pillow==10.4.0
+
+# The qefficient backend additionally needs QEfficient + its deps, which install ONLY on a
+# Qualcomm Cloud AI 100 host (Cirrascale / AWS DL2q). Do not add it here — install it on the
+# instance per https://github.com/quic/efficient-transformers :
+#   pip install -U pip
+#   pip install QEfficient        # or: git clone + pip install -e .

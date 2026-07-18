@@ -1,0 +1,4 @@
+{{ bos_token }}{% for message in messages %}{{ '<start_of_turn>' + (message['role'] == 'assistant' and 'model' or message['role']) + '
+' }}{% if message['content'] is string %}{{ message['content'] }}{% else %}{% for item in message['content'] %}{% if item['type'] == 'text' %}{{ item['text'] }}{% elif item['type'] == 'image' %}{{ '<|image|>' }}{% endif %}{% endfor %}{% endif %}{{ '<end_of_turn>
+' }}{% endfor %}{% if add_generation_prompt %}{{ '<start_of_turn>model
+' }}{% endif %}
