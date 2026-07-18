@@ -1,31 +1,30 @@
-"""The spoken-answer contract for the cloud tier.
+"""
+Single source of truth for what we ask the VLM to do.
 
-This mirrors GenieXBrain.buildPrompt on the phone (identity + horizontal position,
-never distance, terse, hedge when unclear). It is deliberately duplicated rather than
-shared: the on-device model is Qwen3-VL via GenieX, while the cloud model is InternVL/
-Molmo via QEfficient, and the two runtimes want their prompts tuned independently. What
-must stay identical is the *behaviour* the user hears, not the prompt string.
+TactileSight turns this into speech on the phone a couple seconds after the
+photo is taken, so the description has to be short, spoken-out-loud English,
+and front-load the thing that matters most for someone who can't see the
+frame (an obstacle, a doorway, a person, a curb, stairs...).
+
+Both real backends (openai_compat, qefficient) import SYSTEM_PROMPT and
+USER_PROMPT from here so the wording only has to be tuned in one place.
 """
 
-# Kept short and directive on purpose. Gemma 4 E4B is a reasoning model: an elaborate
-# multi-rule prompt makes it narrate its thinking (and echo any example phrases) instead of
-# just answering. One plain instruction gets a clean terse sentence. The spoken contract
-# (identity + left/center/right, no distance, terse) is preserved, just phrased minimally.
+SYSTEM_PROMPT = (
+    "You are the vision system for a blind or low-vision user's assistive "
+    "device. You will be shown one photo taken from their point of view. "
+    "Reply with ONE short spoken sentence, at most 20 words. "
+    "Say the single most important thing first: an obstacle, a step or "
+    "curb, a door, a person, or a clear path. Give direction (left / right "
+    "/ ahead) and rough distance when you can. "
+    "Do not describe colors, aesthetics, or anything not useful for moving "
+    "safely. No preamble like 'I see' or 'The image shows'. No markdown. "
+    "No hedging ('it appears', 'possibly'). Speak plainly, as if saying it "
+    "out loud right now."
+)
 
+USER_PROMPT = "Describe this scene for someone who cannot see it."
 
-def build_prompt(mode: str, question: str | None, language: str) -> str:
-    if mode.upper() == "QUERY":
-        return (
-            f"Look at the image and answer in one short sentence, in {language}. "
-            f"Do not mention distance. Question: {question or ''}"
-        )
-    # DESCRIBE. "including any objects or animals on the floor" is load-bearing: without it the
-    # model fixates on large background objects (a window, a bookshelf) and skips a small subject
-    # in the foreground — e.g. a cat sitting in the path, exactly what a walking user needs to hear.
-    # "only describe what is really there" + low temperature (see openai backend) keep it from
-    # inventing people/animals when the scene has none.
-    return (
-        "In one short sentence, say what is ahead, including any objects or animals on the floor, "
-        "and whether each is on the left, center, or right. Name the things directly, no preamble. "
-        f"Only describe what is really there. Do not mention distance. Answer in {language}."
-    )
+# Upper bound we ask real backends to respect. Keep it tight — this is
+# spoken back to the user, not read.
+MAX_DESCRIPTION_TOKENS = 60

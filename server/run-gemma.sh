@@ -1,37 +1,59 @@
 #!/usr/bin/env bash
-# Start the cloud-tier VLM backend: Gemma 4 E4B on llama.cpp + CUDA (RTX 5060).
+# run-gemma.sh — launches Gemma 4 E4B (vision) on llama.cpp/CUDA as an
+# OpenAI-compatible server on :8080. This is the hackathon demo backend for
+# TS_VLM_BACKEND=openai.
 #
-# This is the hard-won working config (2026-07-18). Gemma 4 is new enough that the defaults
-# fight it, so the non-obvious flags matter:
+# Needs, both gitignored, in server/models/:
+#   models/gemma-4-e4b-it.gguf          the text/weights GGUF
+#   models/gemma-4-e4b-it-mmproj.gguf   the vision projector GGUF
+# and a CUDA-built `llama-server` binary on PATH (or set LLAMA_SERVER_BIN
+# below to its full path).
+#
+# Non-obvious flags and why they're here:
 #   --chat-template-file gemma-vision-terse.jinja
-#       Gemma 4's *embedded* template crashes llama.cpp's Jinja engine, and the bundled
-#       "interleaved" template forces the model into verbose reasoning mode (answer ends up
-#       empty in `content`). This minimal template = simple Gemma turns + the <|image|> marker,
-#       no thinking scaffold → clean terse answers.
-#   -ngl 99   all layers on the GPU (uses ~4.7 GB VRAM, leaves headroom on an 8 GB card).
+#       Dodges the GGUF-embedded chat template. Some llama-server builds
+#       have a bug where --chat-template-file is silently ignored once
+#       --mmproj is also passed (github.com/ggml-org/llama.cpp issue
+#       #24189) — if you see it clearly using the embedded template
+#       instead, that's this bug; grab a newer llama.cpp build.
+#   --reasoning off
+#       Gemma 4's embedded template defaults to emitting a reasoning/
+#       "thinking" turn before the real answer. For a one-sentence spoken
+#       description that's pure latency with no upside, so it's forced off
+#       here rather than relying on --chat-template-kwargs enable_thinking
+#       (that flag is deprecated in favor of --reasoning).
+#   --jinja
+#       Required for a custom --chat-template-file to be honored at all.
 #
-# Serves an OpenAI-compatible endpoint on :8080. Point the FastAPI server at it with:
-#   TS_VLM_BACKEND=openai TS_OPENAI_BASE_URL=http://localhost:8080/v1 \
-#     uvicorn app:app --host 0.0.0.0 --port 8000
+# If mmproj loading crashes (SIGABRT during clip_model_loader::load_tensors)
+# on your llama.cpp build, that's a known Gemma-4+CUDA+mmproj issue on some
+# versions (ggml-org/llama.cpp #21402) — try the latest llama.cpp release
+# before the demo, not after.
+
 set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")"
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LLAMA_SERVER="${LLAMA_SERVER:-$HOME/llama.cpp/build/bin/llama-server}"
-CUDA_LIB="${CUDA_LIB:-/usr/local/cuda-13.2/lib64}"
-MODEL="${MODEL:-$HERE/models/gemma-4-E4B-it-Q4_K_M.gguf}"
-MMPROJ="${MMPROJ:-$HERE/models/mmproj-gemma-4-E4B-it-Q8_0.gguf}"
-TEMPLATE="${TEMPLATE:-$HERE/gemma-vision-terse.jinja}"
+LLAMA_SERVER_BIN="${LLAMA_SERVER_BIN:-llama-server}"
+MODEL_DIR="${MODEL_DIR:-./models}"
+MODEL_GGUF="${MODEL_GGUF:-$MODEL_DIR/gemma-4-e4b-it.gguf}"
+MMPROJ_GGUF="${MMPROJ_GGUF:-$MODEL_DIR/gemma-4-e4b-it-mmproj.gguf}"
 PORT="${PORT:-8080}"
-CTX="${CTX:-8192}"
 
-for f in "$LLAMA_SERVER" "$MODEL" "$MMPROJ" "$TEMPLATE"; do
-  [ -e "$f" ] || { echo "missing: $f" >&2; exit 1; }
+for f in "$MODEL_GGUF" "$MMPROJ_GGUF"; do
+  if [[ ! -f "$f" ]]; then
+    echo "error: missing $f" >&2
+    echo "  drop the Gemma 4 E4B GGUF + mmproj GGUF into $MODEL_DIR/ first" >&2
+    exit 1
+  fi
 done
 
-echo "Starting Gemma 4 E4B VLM server on :$PORT (GPU) ..."
-exec env LD_LIBRARY_PATH="$CUDA_LIB:${LD_LIBRARY_PATH:-}" "$LLAMA_SERVER" \
-  -m "$MODEL" \
-  --mmproj "$MMPROJ" \
-  --jinja --chat-template-file "$TEMPLATE" \
-  -ngl 99 -c "$CTX" \
-  --host 0.0.0.0 --port "$PORT"
+exec "$LLAMA_SERVER_BIN" \
+  --model "$MODEL_GGUF" \
+  --mmproj "$MMPROJ_GGUF" \
+  --host 0.0.0.0 \
+  --port "$PORT" \
+  --n-gpu-layers 99 \
+  --ctx-size 8192 \
+  --jinja \
+  --chat-template-file gemma-vision-terse.jinja \
+  --reasoning off

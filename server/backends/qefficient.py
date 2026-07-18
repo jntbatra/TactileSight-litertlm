@@ -1,72 +1,102 @@
-"""Qualcomm Cloud AI 100 backend via QEfficient — the demo target.
-
-This is the ONE file that turns the laptop pipeline into a Cloud AI 100 pipeline. It is
-written but not runnable here: QEfficient and the AIC compiler only exist on a Cloud AI
-100 host (Cirrascale Developer Playground, AWS DL2q, or a card in a server). Everything
-else in this server is exercised tonight with the mock/openai backends; when we get an
-instance we set TS_VLM_BACKEND=qefficient and verify this file against real hardware.
-
-QEfficient validates InternVL and Molmo as VLMs (Qwen3-VL is NOT on that list, which is
-why the cloud tier's model differs from the on-device GenieX model). Configure with:
-
-    TS_QEFF_MODEL      HF id of a QEfficient-validated VLM (default an InternVL)
-    TS_QEFF_CORES      AIC cores to compile for (default 16)
-    TS_QEFF_CTX_LEN    max context length to compile (default 4096)
-
-Refs: https://github.com/quic/efficient-transformers
-      https://quic.github.io/efficient-transformers/source/validate.html
 """
+qefficient backend — runs a VLM on Qualcomm Cloud AI 100 via QEfficient
+(https://github.com/quic/efficient-transformers). This is the demo target.
 
-from __future__ import annotations
+*** This is the one file the README says must be verified against real
+*** hardware. QEfficient's VLM API has moved between releases; treat the
+*** calls below as the best-effort shape, and fix them up against whatever
+*** version is installed on the Cloud AI 100 instance (check
+*** `python -c "import QEfficient; print(QEfficient.__version__)"` and the
+*** docs at https://quic.github.io/efficient-transformers/).
 
+Only imported lazily (inside _load_pipeline) so that `mock` and `openai`
+backends keep working on a laptop with no QEfficient / Cloud AI 100 SDK
+installed at all.
+"""
+import asyncio
 import io
 import os
+import threading
+
+from PIL import Image
+
+from prompt import MAX_DESCRIPTION_TOKENS, SYSTEM_PROMPT, USER_PROMPT
+
+MODEL_ID = os.environ.get("TS_QEFF_MODEL", "OpenGVLab/InternVL2_5-1B")
+NUM_CORES = int(os.environ.get("TS_QEFF_NUM_CORES", "16"))
+
+_lock = threading.Lock()
+_pipeline = None  # populated on first request; compilation is slow (minutes)
 
 
-class QEfficientBackend:
-    def __init__(self) -> None:
-        self.model_id = os.environ.get("TS_QEFF_MODEL", "OpenGVLab/InternVL2_5-1B")
-        self.cores = int(os.environ.get("TS_QEFF_CORES", "16"))
-        self.ctx_len = int(os.environ.get("TS_QEFF_CTX_LEN", "4096"))
-        self._model = None
-        self._processor = None
+def _load_pipeline():
+    """
+    Load + compile the model once per process. First call is slow (AIC
+    compile step); every call after reuses the compiled QPC.
+    """
+    global _pipeline
+    with _lock:
+        if _pipeline is not None:
+            return _pipeline
 
-    def _ensure_compiled(self) -> None:
-        """Load + compile-to-AIC once. Compilation is minutes; generation is fast."""
-        if self._model is not None:
-            return
-        # Imported lazily so the rest of the server runs on a machine without QEfficient.
-        from QEfficient import QEFFAutoModelForImageTextToText  # type: ignore
-        from transformers import AutoProcessor  # type: ignore
+        # InternVL / Molmo are loaded through QEFFAutoModelForCausalLM with
+        # trust_remote_code=True (they're VLMs but ported through the
+        # CausalLM class to stay HF-compatible — see QEfficient's
+        # validated-models list).
+        from transformers import AutoTokenizer
+        from QEfficient import QEFFAutoModelForCausalLM
 
-        self._processor = AutoProcessor.from_pretrained(self.model_id, trust_remote_code=True)
-        model = QEFFAutoModelForImageTextToText.from_pretrained(
-            self.model_id, trust_remote_code=True
+        tokenizer = AutoTokenizer.from_pretrained(
+            MODEL_ID, trust_remote_code=True, use_fast=False
         )
-        # Compiles the model to the Cloud AI 100 (AIC) backend. Exact knobs (num_cores,
-        # batch/prefill/ctx split, img size) are model-specific — confirm against the
-        # instance the first time; these are conservative defaults for a 1B-class VLM.
-        model.compile(num_cores=self.cores, ctx_len=self.ctx_len)
-        self._model = model
-
-    def generate(self, image_bytes: bytes, prompt: str) -> str:
-        self._ensure_compiled()
-        from PIL import Image  # type: ignore
-
-        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-        messages = [
-            {
-                "role": "user",
-                "content": [{"type": "image"}, {"type": "text", "text": prompt}],
-            }
-        ]
-        chat = self._processor.apply_chat_template(  # type: ignore[union-attr]
-            messages, add_generation_prompt=True
+        model = QEFFAutoModelForCausalLM.from_pretrained(
+            MODEL_ID, trust_remote_code=True
         )
-        inputs = self._processor(images=image, text=chat, return_tensors="pt")  # type: ignore[union-attr]
-        out = self._model.generate(inputs=inputs, generation_len=256)  # type: ignore[union-attr]
-        # QEfficient returns generated ids; decode with the processor's tokenizer.
-        text = self._processor.batch_decode(  # type: ignore[union-attr]
-            out.generated_ids, skip_special_tokens=True
-        )[0]
-        return text.strip()
+        # Compiles to a QPC for the AIC backend. num_cores is a starting
+        # point for a single Cloud AI 100 card — tune against whatever the
+        # instance actually has.
+        model.compile(num_cores=NUM_CORES)
+
+        _pipeline = (tokenizer, model)
+        return _pipeline
+
+
+def _run_sync(image_bytes: bytes) -> str:
+    tokenizer, model = _load_pipeline()
+
+    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+
+    # NOTE: this mirrors InternVL's own `model.chat(tokenizer, pixel_values,
+    # question, generation_config)` HF interface. QEfficient's compiled
+    # wrapper generally exposes an equivalent `.generate(...)` — confirm the
+    # exact signature (and how it wants the image preprocessed: raw PIL vs.
+    # a CLIPImageProcessor pixel_values tensor) against the installed
+    # QEfficient version on the Cloud AI 100 box before the demo.
+    question = f"<image>\n{SYSTEM_PROMPT}\n{USER_PROMPT}"
+    generation_config = dict(max_new_tokens=MAX_DESCRIPTION_TOKENS, do_sample=False)
+
+    response = model.generate(
+        tokenizer=tokenizer,
+        images=[image],
+        prompt=question,
+        generation_config=generation_config,
+    )
+
+    # QEfficient's generate() has returned both a bare string and a
+    # dict/object with a .generated_texts / .sequences field across
+    # versions — normalize defensively rather than assume one shape.
+    if isinstance(response, str):
+        text = response
+    elif isinstance(response, dict) and "generated_texts" in response:
+        text = response["generated_texts"][0]
+    else:
+        text = str(response)
+
+    return text.strip()
+
+
+async def describe_image(image_bytes: bytes) -> str:
+    # QEfficient's calls are blocking/synchronous (CPU + AIC driver calls),
+    # so keep them off the asyncio event loop.
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _run_sync, image_bytes)

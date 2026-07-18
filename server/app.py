@@ -1,60 +1,65 @@
-"""TactileSight cloud VLM server.
-
-The phone's CloudBrain POSTs one JPEG + the mode/question/language to /v1/describe and
-gets back the spoken answer. The model runs behind a swappable VlmBackend (see
-backends/__init__.py) so the same server runs on a laptop tonight and on Qualcomm Cloud
-AI 100 at the demo — only TS_VLM_BACKEND changes.
-
-Run:  TS_VLM_BACKEND=mock uvicorn app:app --host 0.0.0.0 --port 8000
 """
+TactileSight cloud VLM server.
 
-from __future__ import annotations
+This is the "everything else is fixed" part described in the README: the
+phone always talks to this exact API. Only backends.get_backend() changes,
+driven by TS_VLM_BACKEND (mock / openai / qefficient).
+"""
+import logging
 
-import base64
-import binascii
-
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
-from backends import load_backend
-from prompt import build_prompt
+from backends import get_backend, get_backend_name
 
-app = FastAPI(title="TactileSight Cloud VLM", version="0.1")
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("tactilesight")
 
-# Chosen once at startup from TS_VLM_BACKEND. A real (qefficient) backend compiles lazily
-# on the first request, so startup stays fast regardless of backend.
-_backend = load_backend()
+app = FastAPI(title="TactileSight cloud VLM server")
 
-
-class DescribeRequest(BaseModel):
-    mode: str  # "DESCRIBE" | "QUERY"
-    question: str | None = None
-    language: str = "en"
-    image_b64: str
+# Phones send JPEG/PNG frames from the camera. 10 MB is generous headroom
+# for a single frame at typical phone-camera compression.
+MAX_IMAGE_BYTES = 10 * 1024 * 1024
 
 
 class DescribeResponse(BaseModel):
-    spoken: str
-    rich: str | None = None
-    confident: bool = True
+    description: str
+    backend: str
 
 
-@app.get("/health")
-def health() -> dict:
-    return {"status": "ok", "backend": type(_backend).__name__}
+class HealthResponse(BaseModel):
+    status: str
+    backend: str
 
 
-@app.post("/v1/describe", response_model=DescribeResponse)
-def describe(req: DescribeRequest) -> DescribeResponse:
-    try:
-        image_bytes = base64.b64decode(req.image_b64, validate=True)
-    except (binascii.Error, ValueError):
-        raise HTTPException(status_code=400, detail="image_b64 is not valid base64")
+@app.get("/health", response_model=HealthResponse)
+async def health() -> HealthResponse:
+    """Lets the phone (or you) confirm which backend is live before demoing."""
+    return HealthResponse(status="ok", backend=get_backend_name())
+
+
+@app.post("/describe", response_model=DescribeResponse)
+async def describe(image: UploadFile = File(...)) -> DescribeResponse:
+    """
+    The one seam: phone POSTs a single frame here (multipart field `image`),
+    gets back one short spoken-style description. What runs behind this
+    endpoint is decided entirely by TS_VLM_BACKEND.
+    """
+    image_bytes = await image.read()
+
     if not image_bytes:
-        raise HTTPException(status_code=400, detail="image_b64 is empty")
+        raise HTTPException(status_code=400, detail="Empty image upload.")
+    if len(image_bytes) > MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=413, detail="Image too large.")
 
-    prompt = build_prompt(req.mode, req.question, req.language)
-    text = _backend.generate(image_bytes, prompt).strip()
-    if not text:
-        return DescribeResponse(spoken="Nothing clear ahead.", rich=None, confident=False)
-    return DescribeResponse(spoken=text, rich=text, confident=True)
+    name, backend = get_backend()
+
+    try:
+        description = await backend.describe_image(image_bytes)
+    except Exception as exc:  # noqa: BLE001 - surface backend failures as 502s
+        logger.exception("Backend %r failed to describe image", name)
+        raise HTTPException(
+            status_code=502, detail=f"Backend {name!r} failed: {exc}"
+        ) from exc
+
+    return DescribeResponse(description=description, backend=name)

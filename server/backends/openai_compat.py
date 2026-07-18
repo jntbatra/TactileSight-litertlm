@@ -1,56 +1,64 @@
-"""Backend for any OpenAI vision-chat compatible server.
-
-This is the "real descriptions tonight, no special hardware" option: run llama.cpp's
-server (`llama-server --mmproj ...`) or vLLM locally and point this at it. It is also how
-a hosted VLM would be reached if we ever wanted one. Configure with:
-
-    TS_OPENAI_BASE_URL  default http://localhost:8080/v1
-    TS_OPENAI_MODEL     default "local-vlm"
-    TS_OPENAI_API_KEY   optional bearer token
 """
+openai backend — talks to any OpenAI-vision-compatible /chat/completions
+endpoint: llama-server (llama.cpp), vLLM, LM Studio, or the real OpenAI API.
 
-from __future__ import annotations
-
+Tonight's demo target is run-gemma.sh (Gemma 4 E4B via llama.cpp on the
+laptop GPU), pointed to by TS_OPENAI_BASE_URL. Nothing here is Gemma-
+specific — any OpenAI-vision server works.
+"""
 import base64
 import os
 
-import requests
+import httpx
+
+from prompt import MAX_DESCRIPTION_TOKENS, SYSTEM_PROMPT, USER_PROMPT
+
+BASE_URL = os.environ.get("TS_OPENAI_BASE_URL", "http://localhost:8080/v1").rstrip("/")
+API_KEY = os.environ.get("TS_OPENAI_API_KEY", "not-needed")
+MODEL = os.environ.get("TS_OPENAI_MODEL", "gemma-4-e4b")
+TIMEOUT_S = float(os.environ.get("TS_OPENAI_TIMEOUT_S", "30"))
 
 
-class OpenAiCompatBackend:
-    def __init__(self) -> None:
-        self.base_url = os.environ.get("TS_OPENAI_BASE_URL", "http://localhost:8080/v1").rstrip("/")
-        self.model = os.environ.get("TS_OPENAI_MODEL", "local-vlm")
-        self.api_key = os.environ.get("TS_OPENAI_API_KEY")
-        # Low by design: at the model's default (~0.8) the description is unstable and often drops
-        # the salient foreground subject (a cat on the floor) in favour of big background objects.
-        # 0.2 makes it focused and repeatable. Override with TS_OPENAI_TEMPERATURE if needed.
-        self.temperature = float(os.environ.get("TS_OPENAI_TEMPERATURE", "0.2"))
+def _guess_mime(image_bytes: bytes) -> str:
+    # Phones almost always send JPEG; sniff the magic bytes so PNG test
+    # fixtures (like the one in test_app.py) still work.
+    if image_bytes[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    return "image/jpeg"
 
-    def generate(self, image_bytes: bytes, prompt: str) -> str:
-        b64 = base64.b64encode(image_bytes).decode("ascii")
-        headers = {"Content-Type": "application/json"}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
-        payload = {
-            "model": self.model,
-            "max_tokens": 256,
-            "temperature": self.temperature,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
-                        },
-                    ],
-                }
-            ],
-        }
-        resp = requests.post(
-            f"{self.base_url}/chat/completions", json=payload, headers=headers, timeout=120
+
+async def describe_image(image_bytes: bytes) -> str:
+    mime = _guess_mime(image_bytes)
+    b64 = base64.b64encode(image_bytes).decode("ascii")
+    data_url = f"data:{mime};base64,{b64}"
+
+    payload = {
+        "model": MODEL,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": USER_PROMPT},
+                    {"type": "image_url", "image_url": {"url": data_url}},
+                ],
+            },
+        ],
+        "max_tokens": MAX_DESCRIPTION_TOKENS,
+        "temperature": 0.2,
+    }
+    headers = {"Authorization": f"Bearer {API_KEY}"}
+
+    async with httpx.AsyncClient(timeout=TIMEOUT_S) as client:
+        resp = await client.post(
+            f"{BASE_URL}/chat/completions", json=payload, headers=headers
         )
         resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"].strip()
+        data = resp.json()
+
+    try:
+        text = data["choices"][0]["message"]["content"]
+    except (KeyError, IndexError) as exc:
+        raise RuntimeError(f"Unexpected response shape from {BASE_URL}: {data}") from exc
+
+    return text.strip()
