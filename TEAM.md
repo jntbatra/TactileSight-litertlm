@@ -284,6 +284,24 @@ They ship in the APK so the **whole pipeline runs with no band hardware** — th
 | `docs/adr/0001`–`0009` | earlier decisions; several superseded — check the header note on each |
 | `server/` | the cloud tier (contract above) |
 
+### Three on-device paths work, and they are not close
+
+Measured on the OnePlus 15 (SM8850), same capture, same prompt, 2026-07-18/19. All three are `GenieX`; only the runtime and compute unit differ.
+
+| runtime / unit | model | load (once) | TTFT | prefill | decode |
+|---|---|---|---|---|---|
+| **`qairt` / NPU** | Qwen3-VL-4B w4a16 | **6.7–7.2 s** | **260 ms** | **1287 tok/s** | 24–28 tok/s |
+| `llama_cpp` / **NPU** | Gemma-4-E4B q4_0 QAT | 29.2 s | 2688 ms | 142 tok/s | 13.5 tok/s |
+| `llama_cpp` / GPU | Gemma-4-E4B q4_0 QAT | 27–32 s | 3417 ms | 93 tok/s | 11.5–16.7 tok/s |
+
+**`llama_cpp` really does reach Hexagon** — this was an open question and the answer is yes. `ComputeUnitValue.NPU` with `RuntimeIdValue.LLAMA_CPP` runs a community GGUF on the NPU through `libggml-hexagon.so`, no QAIRT bundle required. Against the GPU it is ~27% better TTFT and ~53% better prefill.
+
+**But QAIRT is an order of magnitude ahead** — 10× the TTFT, 9× the prefill, and it loads in a quarter of the time. If a QAIRT bundle exists for the architecture, use it. The ggml-Hexagon path matters for models QAIRT has no factory for (see the registry note below), which is most of them.
+
+`HYBRID` is also exposed by the SDK and is **untested**.
+
+The probe that measured this is in the app: `adb shell am start -n com.tactilesight/.MainActivity --ez hexagon true`. Force-stop first — `am start` on a running activity delivers the intent to the existing instance and `onCreate` never re-runs, so the probe silently does not fire.
+
 ### GenieX version is load-bearing — keep it current
 
 We were pinned to `0.3.1` while `0.3.12` was out, and that one number was the difference between "Qwen3-VL cannot run on the NPU" and a working NPU path. `0.3.1`'s QAIRT plugin exports only `qwen2_5_vl`; `0.3.12` adds `geniex::qwen3_vl::makeModel`. Same bundle, same device, same code — only the SDK changed.
