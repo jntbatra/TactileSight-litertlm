@@ -68,19 +68,23 @@ The app **scans that directory at startup** — adding a model is pushing a fold
 
 Exception: **GenieX downloads its own models** through its ModelManager. That's its design; leave it alone.
 
-### GenieX 0.3.1 QAIRT supports exactly one VLM architecture
+### QAIRT dispatches on a fixed registry of VLM architectures
 
-Measured 2026-07-18 by reading the shipped plugin, after the Qwen3-VL-4B bundle failed to load:
+The QAIRT plugin will only load a bundle whose architecture it has a factory for. Get this wrong and the error names the model, not the cause:
 
 ```
 dispatch: no VLM factory matches model_id 'qwen3_vl_4b_instruct'
 ```
 
-`libgeniex_plugin_qairt.so` exports a single VLM factory — `geniex::qwen2_5_vl::makeModel`, with `qwen2vl::Qwen2VLProcessor`. Text-only LLM factories are `qwen2_5` and `qwen3`.
+Read the factories straight out of the shipped `.so` rather than guessing:
 
-**So the NPU path needs a Qwen2.5-VL QAIRT bundle.** Our 4 GB Qwen3-VL-4B bundle is a different architecture (interleaved mRoPE) and cannot dispatch, no matter how it is pathed — this is a plugin registry limit, not a config mistake. Downloading it was not wasted: it is the right bundle for a later GenieX.
+```bash
+strings -n 5 jni/arm64-v8a/libgeniex_plugin_qairt.so | grep -oE "geniex[0-9]+[a-z0-9_]*(vl)[a-zA-Z0-9_]*" | sort -u
+```
 
-Meanwhile `llama_cpp` has no such registry and **is the path that works today**: Gemma-4-E4B GGUF + `mmproj`, 93 tok/s prefill, 11.5 tok/s decode, 3.4 s TTFT, 28.7 s one-time load. It ships `libggml-hexagon.so`/`libggml-htp-v81.so` alongside `libggml-opencl.so`, so Hexagon through ggml is worth trying before assuming the NPU needs QAIRT at all.
+`0.3.1` had one (`qwen2_5_vl`). `0.3.12` has `qwen2_5_vl` **and** `qwen3_vl` — which is what unblocked our bundle. Text-only LLM factories are `qwen2_5` and `qwen3`.
+
+`llama_cpp` has no such registry and will take any GGUF with an `mmproj`, which is why it is the fallback.
 
 ### Secrets
 
