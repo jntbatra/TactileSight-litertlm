@@ -65,6 +65,7 @@ class SarvamSpeechIO(
                 put("input", text)
                 put("source_language_code", SOURCE_LANGUAGE)
                 put("target_language_code", language.sarvamCode)
+                put("model", TRANSLATE_MODEL)
             }.toString()
 
             val json = post(TRANSLATE_ENDPOINT, body)
@@ -146,6 +147,12 @@ class SarvamSpeechIO(
 
         /** The VLM always answers in English (ADR-0012). */
         const val SOURCE_LANGUAGE = "en-IN"
+
+        /**
+         * Not the default. `mayura:v1` covers 10 languages and rejects the rest
+         * with "please switch to sarvam-translate:v1"; this one covers 22.
+         */
+        const val TRANSLATE_MODEL = "sarvam-translate:v1"
         const val MODEL = "bulbul:v3"
         const val SPEAKER = "ritu"
         const val TIMEOUT_MS = 15_000

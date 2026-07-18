@@ -86,6 +86,24 @@ strings -n 5 jni/arm64-v8a/libgeniex_plugin_qairt.so | grep -oE "geniex[0-9]+[a-
 
 `llama_cpp` has no such registry and will take any GGUF with an `mmproj`, which is why it is the fallback.
 
+### Sarvam: probe the API, do not trust the docs
+
+The docs 404 and render in JavaScript. The API tells you the truth if you send an invalid value — the validation error enumerates what is valid:
+
+```bash
+curl -s -X POST https://api.sarvam.ai/text-to-speech \
+  -H "api-subscription-key: $KEY" -H "Content-Type: application/json" \
+  -d '{"text":"t","target_language_code":"zz-ZZ","model":"bulbul:v3"}'
+```
+
+Three things this found that cost us an evening (2026-07-18):
+
+1. **TTS does not translate.** English text with `target_language_code: pa-IN` gives English words in a Punjabi voice. Everything succeeds; the user just cannot understand it. **Always `POST /translate` first.**
+2. **Use `sarvam-translate:v1`, not the default `mayura:v1`** — 22 languages against 10.
+3. **`bulbul:v3` speaks only 11.** The other 12 need beta access on the account. Do not list a language we cannot speak: it translates, then fails at the last step.
+
+Speakers are per-model — `bulbul:v2`'s `anushka` is rejected by `bulbul:v3`. We run `bulbul:v3` + `ritu`.
+
 ### Secrets
 
 Sarvam credentials go in env/secure config. **This repo is public** — a committed key is a compromised key.

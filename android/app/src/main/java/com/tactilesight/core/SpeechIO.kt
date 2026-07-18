@@ -35,32 +35,54 @@ interface SpeechIO {
  * English, Hindi and Punjabi come first because they are the demo path and
  * should be reachable without scrolling; the rest follow alphabetically.
  */
-enum class Language(val sarvamCode: String, val displayName: String) {
-    ENGLISH("en-IN", "English"),
-    HINDI("hi-IN", "हिन्दी"),
-    PUNJABI("pa-IN", "ਪੰਜਾਬੀ"),
-    ASSAMESE("as-IN", "অসমীয়া"),
-    BENGALI("bn-IN", "বাংলা"),
-    BODO("brx-IN", "बड़ो"),
-    DOGRI("doi-IN", "डोगरी"),
-    GUJARATI("gu-IN", "ગુજરાતી"),
-    KANNADA("kn-IN", "ಕನ್ನಡ"),
-    KASHMIRI("ks-IN", "کٲشُر"),
-    KONKANI("kok-IN", "कोंकणी"),
-    MAITHILI("mai-IN", "मैथिली"),
-    MALAYALAM("ml-IN", "മലയാളം"),
-    MANIPURI("mni-IN", "ꯃꯤꯇꯩꯂꯣꯟ"),
-    MARATHI("mr-IN", "मराठी"),
-    NEPALI("ne-IN", "नेपाली"),
-    ODIA("od-IN", "ଓଡ଼ିଆ"),
-    SANSKRIT("sa-IN", "संस्कृतम्"),
-    SANTALI("sat-IN", "ᱥᱟᱱᱛᱟᱲᱤ"),
-    SINDHI("sd-IN", "سنڌي"),
-    TAMIL("ta-IN", "தமிழ்"),
-    TELUGU("te-IN", "తెలుగు"),
-    URDU("ur-IN", "اردو");
+enum class Language(
+    val sarvamCode: String,
+    val displayName: String,
+    /**
+     * Whether Sarvam will actually *speak* it on our account.
+     *
+     * Translation and speech have different coverage, and the gap is not a
+     * model choice — `sarvam-translate:v1` renders 22 languages, but
+     * `bulbul:v3` answers 12 of them with "please request beta access". A
+     * language we can translate but not speak is worse than one we do not
+     * offer: it translates, then fails at the very last step, and the user
+     * hears a network error instead of their answer.
+     *
+     * Measured against the live API on 2026-07-18 (see the probe above); flip
+     * these to true if beta access is granted.
+     */
+    val isSpeakable: Boolean,
+) {
+    ENGLISH("en-IN", "English", isSpeakable = true),
+    HINDI("hi-IN", "हिन्दी", isSpeakable = true),
+    PUNJABI("pa-IN", "ਪੰਜਾਬੀ", isSpeakable = true),
+    BENGALI("bn-IN", "বাংলা", isSpeakable = true),
+    GUJARATI("gu-IN", "ગુજરાતી", isSpeakable = true),
+    KANNADA("kn-IN", "ಕನ್ನಡ", isSpeakable = true),
+    MALAYALAM("ml-IN", "മലയാളം", isSpeakable = true),
+    MARATHI("mr-IN", "मराठी", isSpeakable = true),
+    ODIA("od-IN", "ଓଡ଼ିଆ", isSpeakable = true),
+    TAMIL("ta-IN", "தமிழ்", isSpeakable = true),
+    TELUGU("te-IN", "తెలుగు", isSpeakable = true),
+
+    // Translatable, but bulbul:v3 refuses them without beta access.
+    ASSAMESE("as-IN", "অসমীয়া", isSpeakable = false),
+    BODO("brx-IN", "बड़ो", isSpeakable = false),
+    DOGRI("doi-IN", "डोगरी", isSpeakable = false),
+    KASHMIRI("ks-IN", "کٲشُر", isSpeakable = false),
+    KONKANI("kok-IN", "कोंकणी", isSpeakable = false),
+    MAITHILI("mai-IN", "मैथिली", isSpeakable = false),
+    MANIPURI("mni-IN", "ꯃꯤꯇꯩꯂꯣꯟ", isSpeakable = false),
+    NEPALI("ne-IN", "नेपाली", isSpeakable = false),
+    SANSKRIT("sa-IN", "संस्कृतम्", isSpeakable = false),
+    SANTALI("sat-IN", "ᱥᱟᱱᱛᱟᱲᱤ", isSpeakable = false),
+    SINDHI("sd-IN", "سنڌي", isSpeakable = false),
+    URDU("ur-IN", "اردو", isSpeakable = false);
 
     companion object {
+        /** What the picker offers: only what the user will actually hear. */
+        val speakable: List<Language> get() = entries.filter { it.isSpeakable }
+
         fun fromCode(code: String?): Language =
             entries.firstOrNull { it.sarvamCode == code } ?: ENGLISH
     }

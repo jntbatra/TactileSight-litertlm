@@ -199,7 +199,7 @@ class MainActivity : AppCompatActivity() {
      */
     private fun setUpLanguagePicker() {
         val app = application as TactileSightApp
-        val languages = Language.entries
+        val languages = Language.speakable
 
         binding.languageSpinner.adapter = ArrayAdapter(
             this,
