@@ -54,6 +54,25 @@ class OrchestratorTest {
     }
 
     @Test
+    fun `the brain is resolved per press, so switching destination takes effect`() = runTest {
+        // Switching to on-device (or having privacy mode force it) must stop
+        // the very next press from reaching the previous brain. A reference
+        // captured at construction would keep sending frames to the cloud.
+        val cloud = FakeBrain("from the cloud")
+        val onDevice = FakeBrain("from the phone")
+        var current: SemanticBrain = cloud
+        val speech = FakeSpeech()
+        val orchestrator = Orchestrator(FakeFrameSource(frame), { current }, speech)
+
+        assertEquals("from the cloud", orchestrator.onPress())
+        current = onDevice
+        assertEquals("from the phone", orchestrator.onPress())
+
+        assertEquals(1, cloud.describes)
+        assertEquals(1, onDevice.describes)
+    }
+
+    @Test
     fun `a press captures a frame, describes it, and speaks the result`() = runTest {
         val frames = FakeFrameSource(frame)
         val brain = FakeBrain("A clear path ahead.")

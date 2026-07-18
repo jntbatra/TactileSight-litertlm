@@ -1,5 +1,6 @@
 package com.tactilesight
 
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.util.Log
@@ -10,14 +11,20 @@ import android.widget.LinearLayout
 import android.widget.Spinner
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import androidx.viewpager2.widget.ViewPager2
+import com.tactilesight.brain.GenieXBrain
+import com.tactilesight.brain.PromptBenchmark
+import com.tactilesight.brain.VlmPrompt
+import com.tactilesight.core.BrainMode
 import com.tactilesight.core.BrowsableFrameSource
 import com.tactilesight.core.Frame
 import com.tactilesight.core.FrameSource
 import com.tactilesight.core.Orchestrator
 import com.tactilesight.databinding.ActivityMainBinding
 import com.tactilesight.frame.BundledCaptureSource
+import com.tactilesight.frame.DepthCoverage
 import com.tactilesight.frame.DepthRenderer
 import com.tactilesight.frame.FramePage
 import com.tactilesight.frame.FramePagerAdapter
@@ -54,12 +61,13 @@ class MainActivity : AppCompatActivity() {
         orchestrator = Orchestrator(
             frames = frames,
             // Owned by the Application, so rotation never drops the model.
-            brain = (application as TactileSightApp).brain,
+            brain = { (application as TactileSightApp).brain },
             speech = SarvamSpeechIO(cacheDir),
         )
 
         setUpCarousel()
         setUpSourcePicker()
+        setUpBrainPicker()
         setUpScenePicker()
 
         if (BuildConfig.SARVAM_API_KEY.isBlank()) {
@@ -67,6 +75,9 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.describeButton.setOnClickListener { onPress() }
+
+        // Dev affordance, not a feature: adb shell am start -n <pkg>/.MainActivity --ez sweep true
+        if (intent?.getBooleanExtra(EXTRA_SWEEP, false) == true) runPromptSweep()
     }
 
     private fun setUpSourcePicker() {
@@ -89,6 +100,136 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+
+    /**
+     * Where the frame gets described: on the phone, on our server, or in the
+     * cloud. The endpoint field appears only for the two that need an address.
+     *
+     * The privacy rule is *not* enforced here. This screen only reflects it —
+     * [TactileSightApp.applyMode] resolves the mode that actually runs, so a
+     * blocked destination cannot be reached by any path through the UI.
+     */
+    private fun setUpBrainPicker() {
+        val app = application as TactileSightApp
+        val modes = BrainMode.entries
+
+        binding.brainSpinner.adapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_dropdown_item,
+            modes.map { it.displayName },
+        )
+        binding.brainSpinner.setSelection(modes.indexOf(app.settings.effectiveMode))
+        binding.privacySwitch.isChecked = app.settings.privacyMode
+
+        binding.brainSpinner.onSelect { position ->
+            val requested = modes[position]
+            app.applyMode(requested)
+            showEndpointFor(app.settings.effectiveMode)
+
+            if (app.settings.effectiveMode != requested) {
+                toast(getString(R.string.privacy_blocked, requested.displayName))
+                binding.brainSpinner.setSelection(modes.indexOf(app.settings.effectiveMode))
+            } else if (requested.sendsImageryOffDevice && app.settings.urlFor(requested).isBlank()) {
+                toast(getString(R.string.endpoint_missing))
+            }
+            showBrain()
+        }
+
+        binding.privacySwitch.setOnCheckedChangeListener { _, isChecked ->
+            app.settings.privacyMode = isChecked
+            // Re-resolve immediately: switching privacy on while a cloud brain
+            // is resident must drop it now, not at the next press.
+            app.applyMode(app.settings.mode)
+            binding.brainSpinner.setSelection(modes.indexOf(app.settings.effectiveMode))
+            showEndpointFor(app.settings.effectiveMode)
+            showBrain()
+        }
+
+        // The address is saved as it is typed, so a tunnel URL survives the
+        // app being killed — which ColorOS does aggressively.
+        binding.endpointField.doAfterTextChanged { text ->
+            val mode = app.settings.effectiveMode
+            if (mode.sendsImageryOffDevice) {
+                app.settings.setUrlFor(mode, text?.toString().orEmpty())
+                app.applyMode(mode)
+                showBrain()
+            }
+        }
+
+        binding.modelField.doAfterTextChanged { text ->
+            if (app.settings.effectiveMode == BrainMode.CLOUD) {
+                app.settings.cloudModel = text?.toString().orEmpty()
+                app.applyMode(BrainMode.CLOUD)
+                showBrain()
+            }
+        }
+
+        // Show the prompt that will actually be sent, so it can be read and
+        // edited rather than guessed at. Stored blank whenever it matches the
+        // built-in one — that way a later improvement to VlmPrompt still
+        // reaches anyone who never customised it, instead of being frozen out
+        // by a copy of today's wording sitting in their preferences.
+        binding.promptField.setText(app.settings.customPrompt.ifBlank { VlmPrompt.describe() })
+        binding.promptField.doAfterTextChanged { text ->
+            val typed = text?.toString().orEmpty()
+            app.settings.customPrompt = if (typed.trim() == VlmPrompt.describe()) "" else typed
+        }
+
+        binding.resetPromptButton.setOnClickListener {
+            app.settings.customPrompt = ""
+            binding.promptField.setText(VlmPrompt.describe())
+            toast(getString(R.string.reset_prompt))
+        }
+
+        showEndpointFor(app.settings.effectiveMode)
+        showBrain()
+    }
+
+    private fun showEndpointFor(mode: BrainMode) {
+        val app = application as TactileSightApp
+        binding.endpointField.visibility =
+            if (mode.sendsImageryOffDevice) View.VISIBLE else View.GONE
+        // Only the cloud needs a model named: the private server picks its own
+        // via TS_VLM_BACKEND, and on-device uses whatever is staged.
+        binding.modelField.visibility =
+            if (mode == BrainMode.CLOUD) View.VISIBLE else View.GONE
+
+        val savedUrl = app.settings.urlFor(mode)
+        if (binding.endpointField.text.toString() != savedUrl) {
+            binding.endpointField.setText(savedUrl)
+        }
+        if (binding.modelField.text.toString() != app.settings.cloudModel) {
+            binding.modelField.setText(app.settings.cloudModel)
+        }
+    }
+
+    /** Name the resident brain, so which engine answered is never a guess. */
+    private fun showBrain() {
+        val app = application as TactileSightApp
+        binding.status.text = getString(R.string.status_brain, app.brain.name)
+    }
+
+    /** Score two prompt wordings over the bundled captures — see PromptBenchmark. */
+    private fun runPromptSweep() {
+        val brain = (application as TactileSightApp).brain as? GenieXBrain ?: run {
+            Log.w(TAG, "prompt sweep needs an on-device brain, got ${(application as TactileSightApp).brain.name}")
+            return
+        }
+        val browsable = frames as? BrowsableFrameSource ?: return
+
+        binding.status.text = getString(R.string.status_working)
+        lifecycleScope.launch {
+            try {
+                PromptBenchmark.run(brain, browsable)
+                binding.status.text = "Prompt sweep done — see logcat"
+            } catch (e: Exception) {
+                Log.e(TAG, "prompt sweep failed", e)
+            }
+        }
+    }
+
+    private fun toast(message: String) =
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
 
     /**
      * A capture picker, but only for a source that has captures to pick from.
@@ -136,27 +277,26 @@ class MainActivity : AppCompatActivity() {
 
     /** Show a frame's three streams. Works for any source — see [DepthRenderer]. */
     private fun showFrame(frame: Frame) {
+        // Trimmed to what depth can measure — the same crop the VLM is given,
+        // so the preview shows exactly what the brain sees.
+        val colour = DepthCoverage.cropToMeasurableRegion(frame.rgbJpeg).toBitmap()
+        val infrared = frame.irJpeg.toBitmap()
+        val depth = DepthRenderer.render(frame.depthMillimetres)
+
         pages.submit(
             listOf(
-                FramePage(
-                    getString(R.string.stream_rgb),
-                    getString(R.string.preview_rgb),
-                    frame.rgbJpeg.toBitmap(),
-                ),
-                FramePage(
-                    getString(R.string.stream_ir),
-                    getString(R.string.preview_ir),
-                    frame.irJpeg.toBitmap(),
-                ),
-                FramePage(
-                    getString(R.string.stream_depth),
-                    getString(R.string.preview_depth),
-                    DepthRenderer.render(frame.depthMillimetres),
-                ),
+                FramePage(label(R.string.stream_rgb, colour), getString(R.string.preview_rgb), colour),
+                FramePage(label(R.string.stream_ir, infrared), getString(R.string.preview_ir), infrared),
+                FramePage(label(R.string.stream_depth, depth), getString(R.string.preview_depth), depth),
             ),
         )
         buildDots(count = 3, selected = binding.framePager.currentItem)
     }
+
+    /** Name plus the dimensions actually on screen — so a crop is visible as a number. */
+    private fun label(nameRes: Int, bitmap: Bitmap?): String =
+        if (bitmap == null) getString(nameRes)
+        else "${getString(nameRes)} · ${bitmap.width}×${bitmap.height}"
 
     /** Three dots under the carousel; the current page is Qualcomm Blue. */
     private fun buildDots(count: Int, selected: Int) {
@@ -214,5 +354,6 @@ class MainActivity : AppCompatActivity() {
 
     private companion object {
         const val TAG = "MainActivity"
+        const val EXTRA_SWEEP = "sweep"
     }
 }
