@@ -237,6 +237,8 @@ Save yourself the afternoon:
   adb shell dumpsys deviceidle whitelist +<pkg>
   adb shell settings put global stay_on_while_plugged_in 3
   ```
+- **Android blocks plain HTTP, so a LAN server is unreachable from the app while Chrome reaches it fine.** Since API 28 cleartext is off by default, and the symptom is maximally confusing: HTTPS endpoints (Sarvam, Cirrascale) work, `http://10.x.x.x:1234` does not, and the browser on the same phone loads it happily — because the browser is not bound by *our* app's policy. Fixed by `android:usesCleartextTraffic="true"` on `<application>`. That is a debug-build convenience: a real release should use a `networkSecurityConfig` that permits cleartext only for the addresses it needs.
+
 - **`pkill -f "<name>"` can kill your own shell** (its command line contains the pattern). Use `pkill -x <name>`.
 - **Depth holes are not an edge case.** Glass, dark and reflective surfaces read invalid. Test against a hole-heavy scene deliberately.
 - **RGB is 16:9, depth/IR are 4:3** — different sensors 24.9 mm apart, so part of the colour frame has no depth behind it. **Corrected 2026-07-18, and the earlier corrections were also wrong.** Measured, not inferred: the 1280x720 colour mode is **neither a crop of the 4:3 frame nor an anamorphic scale of it** — it is a horizontally *wider*, vertically *narrower* readout. Both theories this file previously carried were false.
