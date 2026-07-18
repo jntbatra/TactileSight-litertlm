@@ -15,6 +15,7 @@ import com.geniex.sdk.bean.VlmCreateInput
 import com.tactilesight.core.Answer
 import com.tactilesight.core.Frame
 import com.tactilesight.core.SemanticBrain
+import com.tactilesight.frame.DepthCoverage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -214,10 +215,20 @@ class GenieXBrain(
         Log.i(TAG, "registerPlugin($pluginId) -> $status, version=${sdk.getPluginVersion(pluginId)}")
     }
 
-    /** GenieX takes image *paths*, so the frame is spilled to cache and deleted after. */
+    /**
+     * GenieX takes image *paths*, so the frame is spilled to cache and deleted
+     * after.
+     *
+     * The frame is cropped to the region depth can actually measure first. RGB
+     * and depth are different sensors 24.9 mm apart with different fields of
+     * view, so the VLM would otherwise describe objects the phone can never put
+     * a distance on — and the user would be told about something that then
+     * answers "distance unknown" (see [DepthCoverage]).
+     */
     private suspend fun writeFrameForVlm(frame: Frame): File = withContext(Dispatchers.IO) {
+        val measurable = DepthCoverage.cropToMeasurableRegion(frame.rgbJpeg)
         File.createTempFile("frame", ".jpg", context.cacheDir)
-            .apply { writeBytes(frame.rgbJpeg) }
+            .apply { writeBytes(measurable) }
     }
 
     /** Only ever called on engine/model switch. Never on Activity recreation. */
