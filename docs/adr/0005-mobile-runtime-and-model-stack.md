@@ -1,5 +1,7 @@
 # Mobile module: Qualcomm AI Hub (NPU) for perception, llama.cpp for the Narrator
 
+> **⚠️ SUPERSEDED AGAIN 2026-07-18 by [ADR-0010](0010-three-engine-on-device-inference.md).** The single-GenieX runtime below is replaced by **three interchangeable engines** (LiteRT-LM, GenieX, ExecuTorch+QNN) behind one `SemanticBrain` seam, because which of them actually reaches the Hexagon NPU is an open empirical question. Speech is no longer AI4Bharat/Whisper on QAIRT but **Sarvam cloud** ([ADR-0012](0012-speech-and-language-via-sarvam.md)). The test device is the **8 Elite (SM8850)**, not the S22. The 2026-07-11 note below is itself historical.
+
 > **⚠️ SUPERSEDED 2026-07-11 — see `CONTEXT.md` → "Runtime & resources" + "Model sourcing".**
 > Reworked around a **single VLM** (ADR-0003 superseded):
 > - **VLM (Qwen3-VL-4B)** runs on **GenieX**, backend **by device** (spike-verified 2026-07-11): the AI Hub NPU (QAIRT) bundle is **8-Elite-only**, so on **8 Gen 1/2 the `llama_cpp` GGUF backend (GPU/CPU) is primary** (no NPU accel for the VLM there); the **`qairt` NPU backend is the 8-Elite-only upgrade**. Direct `llama-mtmd-cli` is the drop-in fallback; use **Qwen3-VL-2B** if 4B is tight on 8 GB. Test device: **Galaxy S22 (8 Gen 1, 8 GB)**.

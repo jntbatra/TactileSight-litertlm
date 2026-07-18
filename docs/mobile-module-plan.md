@@ -1,5 +1,10 @@
 # TactileSight — Semantic Module (Mobile Track) Plan
 
+> **⚠️ HISTORICAL — superseded 2026-07-18. Do not build from this document.**
+> Current plan of record: **`CONTEXT.md` → `REBUILD — settled design`**, ADRs 0009–0013, and the
+> **[GitHub Issues](../../issues)**. The 2026-07-18 note below predates the rebuild decision made
+> later the same day.
+
 **Audience:** the whole team (mobile track + band track).
 **Owner:** Mobile track.
 **Event:** Qualcomm Snapdragon Multiverse Hackathon, Noida — July 18–19, 2026.

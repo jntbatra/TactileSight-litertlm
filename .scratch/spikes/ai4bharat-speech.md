@@ -1,5 +1,10 @@
 # Spike: AI4Bharat speech on Android — on-device multilingual ASR + TTS
 
+> **⚠️ NOT THE CHOSEN PATH — superseded 2026-07-18 by [ADR-0012](../../docs/adr/0012-speech-and-language-via-sarvam.md)
+> (speech via Sarvam cloud).** Kept because this spike is the *evidence* for that decision: it
+> documents what on-device Indic ASR/TTS would actually have cost us. Still the reference if we ever
+> need an offline speech fallback — which ADR-0012 deliberately does not have.
+
 Status: ready-for-human
 Owner: pixelpunchllp@gmail.com
 Date: 2026-07-11

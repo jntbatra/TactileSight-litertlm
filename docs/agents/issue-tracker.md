@@ -1,26 +1,45 @@
-# Issue tracker: Local Markdown
+# Issue tracker: GitHub Issues
 
-Issues and PRDs for this repo live as markdown files in `.scratch/`.
+**Tickets live in GitHub Issues on this repo** (moved 2026-07-18, when the rebuild tickets were
+published). Use `gh` to read and write them.
+
+`.scratch/` still exists, but holds **PRDs, spikes and research notes only** — no tickets. The
+local-markdown ticket convention described at the bottom of this file now applies only to
+wayfinding efforts.
 
 ## Conventions
 
-- One feature per directory: `.scratch/<feature-slug>/`
-- The PRD is `.scratch/<feature-slug>/PRD.md`
-- Implementation issues are `.scratch/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01`
-- Triage state is recorded as a `Status:` line near the top of each issue file (see `triage-labels.md` for the role strings)
-- Comments and conversation history append to the bottom of the file under a `## Comments` heading
+- One issue per **vertical slice** — a narrow but complete path through every layer, demoable on
+  its own, sized to fit a single fresh context window.
+- Each issue body carries **What to build**, **Acceptance criteria** (checkboxes), and a
+  **Blocked by** section naming the issues that gate it — or "None — can start immediately".
+- Triage state is a **GitHub label** (see `triage-labels.md`).
+- Conversation happens in issue comments.
 
 ## When a skill says "publish to the issue tracker"
 
-Create a new file under `.scratch/<feature-slug>/` (creating the directory if needed).
+```bash
+gh issue create --title "<title>" --body-file <file> --label ready-for-agent
+```
+
+Publish in dependency order (blockers first) so each issue's **Blocked by** can reference real
+issue numbers.
 
 ## When a skill says "fetch the relevant ticket"
 
-Read the file at the referenced path. The user will normally pass the path or the issue number directly.
+```bash
+gh issue view <number> --comments
+```
 
-## Wayfinding operations
+## Finding the frontier
 
-Used by `/wayfinder`. The **map** is a file with one **child** file per ticket.
+The **frontier** is any open issue whose **Blocked by** list is fully closed. `gh issue list`, then
+read the blocking edges — the numbering is not a work order.
+
+## Wayfinding operations (local files)
+
+Used by `/wayfinder`, which is a research/exploration surface rather than a build queue, and stays
+on local files. The **map** is a file with one **child** file per ticket.
 
 - **Map**: `.scratch/<effort>/map.md` — the Notes / Decisions-so-far / Fog body.
 - **Child ticket**: `.scratch/<effort>/issues/NN-<slug>.md`, numbered from `01`, with the question in the body. A `Type:` line records the ticket type (`research`/`prototype`/`grilling`/`task`); a `Status:` line records `claimed`/`resolved`.

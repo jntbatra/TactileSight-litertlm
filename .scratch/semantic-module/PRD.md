@@ -1,5 +1,10 @@
 # PRD: Semantic Module (the "what" layer)
 
+> **⚠️ HISTORICAL — superseded 2026-07-18.** Written against ADRs 0001–0007; ADRs 0009–0013 have
+> since changed the engine strategy, the speech stack, the interaction model, and the distance rule.
+> The **problem statement and user needs below still hold** — the solution shape does not.
+> Current design: `CONTEXT.md` → `REBUILD — settled design`. Tickets: [GitHub Issues](../../../../issues).
+
 Status: ready-for-agent
 
 Owner: mobile team · Target: Qualcomm Snapdragon Multiverse Hackathon, Noida, 2026-07-18/19

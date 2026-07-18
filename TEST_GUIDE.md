@@ -1,89 +1,120 @@
 # TactileSight — Test Guide
 
-How testing works on this project, how to run it, and — because this is an on-device app —
-the **manual on-device checks** that unit tests can't cover.
+How testing works on this project, how to run it, and — because this is an on-device app — the
+**manual on-device checks** that unit tests can't cover.
+
+> **Status (2026-07-18):** the Android app is being rebuilt, so `android/` does not exist yet and
+> there is no app test suite to report. This document is the **strategy** to build against, not a
+> record of passing tests. The server suite is real and green today.
 
 ## The two halves of testing
 
-1. **Unit tests (automatic, no device)** — the *logic*: gesture disambiguation, scene-memory
-   eviction, the Query orchestrator's behaviour. Fast, deterministic, run in the container.
-2. **On-device checks (manual, needs the S22)** — anything you must *press, hear, or see*:
-   camera, TTS, gesture feel, saving to the gallery. These can't run in CI; use the checklists
-   below.
+1. **Unit tests (automatic, no device)** — the *logic*: gesture disambiguation, the distance
+   percentile and validity threshold, mode routing, prompt/fusion assembly. Fast, deterministic.
+2. **On-device checks (manual, needs the 8 Elite)** — anything you must *press, hear, or see*:
+   camera, TTS, ASR, gesture feel, and whether a runtime actually loads and generates. These can't
+   run in CI; use the checklists below.
 
-## Testing philosophy (how to write more)
+The line between them is the **seam**. Logic sits behind seams and is unit-tested; the thin adapters
+over camera, speech and the inference runtimes are verified on the device.
 
-- **Test behaviour, not implementation.** Assert what a unit *does* (its outputs / the calls it
-  makes), never its internals.
-- **Inject time and dependencies.** `GestureRecognizer` and `SceneMemory` take the current time
-  as a *parameter* (never call the clock inside) — so tests drive time deterministically. The
-  `QueryOrchestrator` depends on the three **seams** (`FrameSource` / `SemanticBrain` /
-  `SpeechIO`) plus an injected `clock`, so tests pass **fakes** and known values.
-- **One behaviour per test; name the test after the behaviour** (e.g.
-  `a_described_scene_is_stored_in_memory`).
+## Testing philosophy
 
-To add a test: find (or introduce) the seam/param, write a fake or pass a known value, then
-assert the observable outcome. See `QueryOrchestratorTest` for the fake-at-seam pattern.
+- **Test behaviour, not implementation.** Assert what a unit *does* — its outputs, the calls it
+  makes — never its internals.
+- **Inject time and dependencies.** Anything time-dependent (gesture recognition, timeouts) takes
+  the current time as a *parameter* and never calls the clock inside, so tests drive time
+  deterministically. Orchestration depends on the seams, so tests pass fakes.
+- **One behaviour per test; name the test after the behaviour**
+  (e.g. `a_region_below_the_validity_threshold_reports_distance_unknown`).
 
-## Run the unit tests
+To add a test: find (or introduce) the seam, write a fake or pass a known value, assert the
+observable outcome.
 
-From the repo root (uses the containerized toolchain — nothing installed on the host):
+### The seams
+
+- **`SemanticBrain`** — one interface, three engine implementations (LiteRT-LM, GenieX,
+  ExecuTorch+QNN). The primary seam: everything above it is engine-agnostic and unit-testable with
+  a fake brain that returns canned text.
+- **Frame capture** — phone camera or band stream or a bundled test scene, behind one interface.
+  This is what makes issue #3 (bundled scenes) so valuable: it turns the *whole* pipeline into
+  something runnable with no hardware at all.
+- **Speech** — ASR/TTS/translate, so language routing is testable without hitting Sarvam.
+
+### Pure logic worth testing hardest
+
+- **Distance from depth** — the robust percentile over valid pixels, and the minimum-valid-pixel
+  threshold that produces *"distance unknown"*. Test it against the real captures: mean valid
+  coverage is 62.6% and one region measured **1% valid**, so the unknown path is not an edge case,
+  it is a main path. See [ADR-0013](docs/adr/0013-ir-aligned-calibration-free-distance.md).
+- **Gesture recognition** — three buttons × tap/hold. **There is no double-press** (ADR-0011); a
+  test asserting one is testing a removed feature.
+- **Mode routing** — hold-then-speak → Query, hold-then-silence → Describe, tap → spatial only.
+- **Every press yields speech** — including the failure paths: no frame, model error, ASR silence,
+  timeout. Assert *something* is always spoken.
+
+## Run the tests
 
 ```bash
-docker run --rm -v "$PWD/android:/workspace" -v ts-gradle:/root/.gradle \
-  tactilesight-android-build gradle testDebugUnitTest --no-daemon --console=plain
+# server — real and green today, hermetic (no model, no GPU, no network)
+cd server && TS_VLM_BACKEND=mock python -m pytest
+
+# app — once issue #1 has landed android/. JDK 21; JDK 25 fails, see TEAM.md
+cd android && ./gradlew testDebugUnitTest
 ```
 
-`BUILD SUCCESSFUL` = all green. HTML report: `android/app/build/reports/tests/testDebugUnitTest/index.html`.
+`server/test_app.py` green **is** the compatibility check between the app and server tracks — it is
+the only automated guard on the frozen HTTP contract, so run it before changing anything in
+`server/`.
 
-### What the unit tests cover (16 tests)
-
-| Test class | Verifies |
-|---|---|
-| `GestureRecognizerTest` | single→Describe, double→Save, hold→QueryStart/End, HEARD fires once on first down, deadline scheduling |
-| `SceneMemoryTest` | recent scene returned, >10-min eviction, oldest-first order, eviction on add |
-| `QueryOrchestratorTest` | Describe/Query prompt selection, language routing, HEARD-first, no-frame fallback, 6s timeout fallback, question passthrough, **scene stored on describe**, **earlier scene passed as context** |
+CI (`Jenkinsfile`) runs the server suite now and picks up the Android stages automatically once
+`android/gradlew` exists. No CI edit is needed when the app lands.
 
 ## Build + install the APK
 
 ```bash
-# build
-docker run --rm -v "$PWD/android:/workspace" -v ts-gradle:/root/.gradle \
-  tactilesight-android-build gradle assembleDebug --no-daemon --console=plain
-# install (host adb; phone plugged in + authorized)
-adb install -r android/app/build/outputs/apk/debug/app-debug.apk
-adb shell am start -n com.tactilesight.semantic/.MainActivity
+cd android && ./gradlew assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-## On-device verification checklists (manual, on the S22)
+If you hit `INSTALL_FAILED_UPDATE_INCOMPATIBLE`, the build is signed differently — uninstall first.
+That wipes app data, but **models live in the external files dir and survive**.
 
-> The unit tests prove the *logic*. These prove the *experience*. Nothing below is auto-verified.
+## On-device verification checklists
 
-### Walking skeleton + Describe (Stage 1, done)
-- [ ] Launch app → grant the camera permission.
-- [ ] Point the back camera at a scene, **single-press Volume-Down**.
-- [ ] You hear a *"heard"* beep, then the phone **speaks** a description.
-  *(Text is still the stub "a chair on your left and a doorway ahead" until the real VLM — ticket #1 — is wired.)*
+> Unit tests prove the *logic*. These prove the *experience*. Nothing below is auto-verified.
+> Fill these in per issue as slices land — each issue's acceptance criteria are the source.
 
-### #2 — Gesture disambiguation
-- [ ] **Single-press** → Describe (speaks).
-- [ ] **Hold** (past ~0.4 s) → a processing tone at press, then the Query stub speaks on release.
-- [ ] **Double-press** (two quick taps) → a "captured" tone (Save).
-- [ ] Every press fires the instant *"heard"* beep first.
-- [ ] Single-press still feels responsive (not laggy from double-tap disambiguation).
+### Engine bring-up (per engine)
 
-### #8 — Save to gallery
-- [ ] **Double-press** → open the Photos/Gallery app → **Pictures/TactileSight** contains a new JPEG of the scene.
-- [ ] A "captured" tone played.
+- [ ] The sideloaded model is discovered by the startup directory scan — no rebuild needed to add one.
+- [ ] The model loads once and **stays resident**: describe twice, and the second is fast (no 30–60 s reload).
+- [ ] Rotating the device does **not** drop or reload the model. *(This is the exact bug that
+      OOM-killed the previous app six times — check it explicitly.)*
+- [ ] Switching engine/model releases the previous one; `MemAvailable` recovers.
+- [ ] Only one VLM is resident at a time.
 
-### Scene memory (wired; fully testable once the real VLM lands, #1)
-- [ ] After the real VLM: Describe scene A, move, Describe scene B, then Query "what was in the first room?" → the answer references scene A.
-- [ ] Wait >10 min → the oldest scene is no longer recalled.
+### Interaction
+
+- [ ] **Tap** → spatial answer (object + measured distance + direction), no VLM, no network.
+- [ ] **Hold, say nothing, release** → full description.
+- [ ] **Hold, ask a question, release** → an answer to that question.
+- [ ] Nothing is spoken until the mic closes — no TTS feeding back into ASR.
+- [ ] No press is ever silent, including on failure.
+
+### Distance honesty
+
+- [ ] A glass / dark / reflective scene reports **"distance unknown"** rather than a number.
+- [ ] Spoken distances match a tape measure within tolerance.
+- [ ] The VLM's own text never contains a distance.
+
+### Language
+
+- [ ] The description is spoken correctly in Hindi, Punjabi, and at least one of Tamil/Telugu.
+- [ ] A question asked in that language is answered in the same language.
 
 ## What is intentionally NOT unit-tested (and why)
 
-- **CameraX / TTS / ASR / MediaStore / NFC / the VLM runtime** — these are the OS/hardware
-  boundary; they're exercised by the manual checklists, not unit tests. That's by design: the
-  seams keep the *logic* testable, and the thin adapters over the platform are verified on the
-  device.
-</content>
+Camera, TTS, ASR, translation, the band transport, and the inference runtimes themselves — these are
+the OS/hardware/network boundary. They are exercised by the manual checklists. That is by design: the
+seams keep the *logic* testable, and the thin adapters over the platform are verified on the device.

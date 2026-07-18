@@ -1,5 +1,11 @@
 # Spike: Band-camera → phone video path on Android (`FrameSource`)
 
+> **Still relevant (noted 2026-07-18), with two changes.** WebRTC is still the band↔phone transport,
+> but [ADR-0009](../../docs/adr/0009-multi-sensor-band-pipeline.md) now specifies the UNO Q's **own
+> 5 GHz AP with a USB-gadget fallback, both as ICE candidates on one PeerConnection** (NFC pairing is
+> dropped), and the link carries **depth + IR keyframes on a data channel** alongside RGB. Current
+> contract: [`docs/band-interface.md`](../../docs/band-interface.md).
+
 **Status:** ready-for-agent
 **Date:** 2026-07-11
 **Owner:** spike author

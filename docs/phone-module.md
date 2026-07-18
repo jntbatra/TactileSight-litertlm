@@ -1,5 +1,16 @@
 # TactileSight — Phone-Side Module (what we're building)
 
+> **⚠️ HISTORICAL — superseded 2026-07-18. Do not build from this document.**
+> Current design: **`CONTEXT.md` → the `REBUILD — settled design` section**, plus ADRs 0009–0013.
+> What changed: the app is **rebuilt from scratch** around **three** inference engines (LiteRT-LM /
+> GenieX / ExecuTorch+QNN), not GenieX alone ([ADR-0010](adr/0010-three-engine-on-device-inference.md));
+> speech is **Sarvam cloud**, not on-device IndicConformer ([ADR-0012](adr/0012-speech-and-language-via-sarvam.md));
+> the system now **speaks measured distances** from the band's depth sensor, reversing the "never
+> distance" rule below ([ADR-0009](adr/0009-multi-sensor-band-pipeline.md),
+> [ADR-0013](adr/0013-ir-aligned-calibration-free-distance.md)); and the interaction is **three
+> buttons × tap/hold with no double-press** ([ADR-0011](adr/0011-interaction-model-and-modes.md)).
+> Kept for the reasoning behind the parts that survived.
+
 **Scope:** the **phone** part only. The band (RGB + depth cameras, UNO Q, on-band haptics)
 is a teammate's scope — see [`band-interface.md`](./band-interface.md) for the contract between them.
 

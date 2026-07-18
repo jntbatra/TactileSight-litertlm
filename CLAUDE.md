@@ -1,6 +1,8 @@
 # TactileSight
 
-Haptic point-cloud navigation headband for the visually impaired. Qualcomm Snapdragon Multiverse Hackathon (Noida, July 18–19 2026). See `TactileSight_Implementation_Plan.md`.
+Haptic point-cloud navigation headband for the visually impaired. Qualcomm Snapdragon Multiverse Hackathon (Noida, July 18–19 2026).
+
+**Plan of record:** `CONTEXT.md` → the `REBUILD — settled design` section (it takes precedence over everything above it), plus `docs/adr/0009`–`0013`. Build setup and hard rules: `TEAM.md`. `TactileSight_Implementation_Plan.md` is the original vision document — good for *why*, historical on *how*.
 
 ## Agent skills
 

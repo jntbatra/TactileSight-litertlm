@@ -1,6 +1,12 @@
 # TactileSight — Haptic Point-Cloud Navigation for the Visually Impaired
 ### Full Implementation Plan — Qualcomm Snapdragon Multiverse Hackathon, Noida (July 18–19, 2026)
 
+> **⚠️ HISTORICAL — this is the original vision document, not the current plan.**
+> It still explains **what TactileSight is and why**, and that part holds. But the implementation
+> detail below predates every architecture decision made on 2026-07-18.
+> **Plan of record:** `CONTEXT.md` → `REBUILD — settled design` · [`docs/adr/0009`–`0013`](docs/adr/)
+> · the [GitHub Issues](../../issues) · [`README.md`](README.md) for the current overview.
+
 ---
 
 ## 1. Overview

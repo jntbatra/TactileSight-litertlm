@@ -1,52 +1,64 @@
-# AGENTS.md — TactileSight (phone-side)
+# AGENTS.md — TactileSight
 
-Instructions for coding agents (OpenAI **Codex**, Cursor, etc.). Claude Code users have the same
-workflow as the `/implement-tactilesight` skill; this file makes it work for any agent.
+Instructions for coding agents (OpenAI **Codex**, Cursor, etc.). Claude Code follows the same
+workflow via the `/implement-tactilesight` skill; this file makes it work for any agent.
+
+This file is deliberately thin — it points at the real documents rather than copying them, because
+duplicated instructions drift apart and we have already lost time to exactly that.
 
 ## What this repo is
-The **phone half** of TactileSight — on-device, on-demand AI vision + multilingual voice for blind
-users. Full context: [`README.md`](README.md) and [`docs/phone-module.md`](docs/phone-module.md).
-**All design is done — do not redesign; read the docs, then build.**
 
-## How to implement (follow this exactly)
-The source-of-truth workflow is
-[`.claude/skills/implement-tactilesight/SKILL.md`](.claude/skills/implement-tactilesight/SKILL.md).
-Follow it. In short — **build one GitHub issue at a time, in dependency-graph order** (see the graph
-in the README). Skip closed issues (#2, #7, #8 are done). Order, critical path first:
+TactileSight: a haptic band that answers **where** and a phone module that answers **what**, for
+blind and visually-impaired users. Product overview: [`README.md`](README.md).
 
-```
-#1 (verify on-device) → #3 (ASR) → #4 (Query) → #6 (Multilingual)
-#5 folds into #1.  #9 / #10 / #11 are stretch.
-```
+The Android app is being **rebuilt from scratch** (decided 2026-07-18) around three interchangeable
+on-device inference engines. `android/` does not exist yet — issue #1 creates it.
 
-For **each** issue:
-1. Read the ticket (`.scratch/semantic-module/issues/NN-*.md`) + the matching part of `docs/phone-module.md`.
-2. **Test-first at the seams** (`FrameSource` / `SemanticBrain` / `SpeechIO` in `seam/`) — fakes in
-   tests, real impl ships. Pure logic uses an injected clock (no hardware).
-3. Typecheck + run tests (see **Build / test** below for the containerized command).
-4. **Verify on-device** anything with a runtime (VLM via GenieX, ASR via IndicConformer) — install on
-   the S22 / 8-Elite and drive the real flow. Compiling is NOT "done."
-5. Review the diff, then **commit** referencing the issue (e.g. `Implement #3: hold-to-record + ASR`).
+## Read before building
+
+1. [`CONTEXT.md`](CONTEXT.md) — **start at the `REBUILD — settled design` section.** It takes
+   precedence over everything above it in that file.
+2. [`docs/adr/0009`–`0013`](docs/adr/) — the current decisions. Earlier ADRs are partly superseded;
+   each one carries a header note saying so.
+3. [`TEAM.md`](TEAM.md) — build setup, the frozen server contract, and the **hard rules**. The hard
+   rules are invariants; read them before writing code, not after.
+
+**The design is settled — do not redesign. Read, then build.**
+
+## How to work
+
+Tickets are **GitHub Issues** on this repo (`gh issue list`). Each has a **Blocked by** section.
+Work the **frontier**: any open issue whose blockers are all closed. Do not assume a linear order —
+read the blocking edges.
+
+For each issue:
+
+1. Read the issue and the ADRs covering the area you're touching.
+2. **Test-first at the seams.** The primary seam is `SemanticBrain` (one interface, three engines).
+   Fakes in tests, real impl ships. Pure logic — gesture recognition, depth fusion, distance
+   percentile — is unit-tested with injected inputs, no hardware.
+3. Typecheck and run the affected tests often; the full suite once at the end.
+4. **Verify on-device** anything with a runtime surface. Compiling is NOT "done".
+5. Review the diff, then **commit** referencing the issue.
 6. Close the issue only after on-device verification passes.
 
 ## Build / test
 
-Builds run in Docker (AGP 8.5.2 needs **JDK 17** — a newer host JDK is rejected). Run from the repo
-root, and always pass `--user` or the container writes `app/build/` as root and breaks the next build.
-
 ```bash
-docker build -t tactilesight-android-build android/docker   # one-time
-
-docker run --rm -v "$(pwd)/android:/workspace" -w /workspace \
-  --user "$(id -u):$(id -g)" tactilesight-android-build ./gradlew test            # unit tests (16, all green)
-
-docker run --rm -v "$(pwd)/android:/workspace" -w /workspace \
-  --user "$(id -u):$(id -g)" tactilesight-android-build ./gradlew assembleDebug   # APK
+cd android && ./gradlew test          # JDK 21 required — see TEAM.md
+cd server  && TS_VLM_BACKEND=mock python -m pytest
 ```
-With JDK 17 + the Android SDK on the host, `cd android && ./gradlew test` works directly.
-See [`android/README.md`](android/README.md).
+
+**JDK 25 will not work** — Gradle's Kotlin compiler fails parsing the version. Use Android Studio's
+bundled JBR (21) via `org.gradle.java.home` in `local.properties`. There is no Docker build any more;
+the old containerized flow belonged to the deleted app.
 
 ## Guardrails
-- Two inference runtimes only (**GenieX** + **sherpa-onnx**). Don't add more without a design decision.
-- Keep the **phone-camera + mock-telemetry fallback** working (demo insurance).
+
+- The **hard rules in [`TEAM.md`](TEAM.md)** are binding. Chief among them: load the model once and
+  keep it; never state a distance you didn't measure; every press yields speech.
+- Three VLM engines only (LiteRT-LM, GenieX, ExecuTorch+QNN). Adding a fourth needs an ADR —
+  ONNX Runtime + QNN EP was already considered and rejected for this role (ADR-0010).
+- The prompt lives server-side in `server/prompt.py`. Never write a second one.
+- Secrets go in env/secure config. **This repo is public.**
 - Each ticket is a tracer bullet — the demo must stay runnable after every issue.

@@ -1,5 +1,12 @@
 # Spike: Qwen3-VL-4B on-device via Qualcomm GenieX (Snapdragon Android)
 
+> **Partly current (noted 2026-07-18).** GenieX is now **one of three** engines
+> ([ADR-0010](../../docs/adr/0010-three-engine-on-device-inference.md)), so this spike still applies
+> to that engine — but it is no longer the whole plan. Since it was written we ran it for real on the
+> 8 Elite: **71 tok/s prefill / 11 tok/s decode** (Gemma-4-E4B), **20/13** (Qwen3-VL-4B) — on the
+> **GPU** via `llama_cpp`, **not** the NPU. Reaching the NPU is the open question the three-engine
+> benchmark exists to answer.
+
 Status: research spike — plan validated against primary sources, NOT yet run on hardware.
 Goal: prove `one RGB frame + one text prompt -> short text answer`, fully on-device, on a
 flagship Snapdragon Android phone, and measure end-to-end latency. This is the TactileSight

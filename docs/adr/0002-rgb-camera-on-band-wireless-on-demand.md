@@ -1,5 +1,7 @@
 # Semantic Module: RGB camera on the band, wireless, one frame per query
 
+> **⚠️ Updated again 2026-07-18 — the transport and stream set below are superseded by [ADR-0009](0009-multi-sensor-band-pipeline.md).** The band now sends **three** streams (RGB + depth + IR), not RGB alone; the link is the UNO Q's **own 5 GHz AP with USB-gadget fallback** on one PeerConnection, not the venue network; and **NFC pairing is dropped** in favour of WebSocket signaling on a known IP. The head-level band-camera *rationale* below still holds. Current contract: [`docs/band-interface.md`](../band-interface.md).
+
 > **Updated 2026-07-11 — see `CONTEXT.md` (Scene Frame, FrameSource seam).**
 > The band RGB camera + on-device inference still hold, but the transport is refined: the band streams a **persistent live feed over WebRTC** (not a single Wi-Fi frame per query); "capture" is the frame **retained on button-press**, behind a **`FrameSource` seam**. For the hackathon the source is the **phone camera** (guaranteed demo); the band-RGB-over-WebRTC feed is a **stretch swap-in during the event**, behind the same seam. WebRTC pairing/signaling is bootstrapped by an **NFC tap** (band ↔ phone).
 
