@@ -23,16 +23,17 @@ class Orchestrator(
      */
     private val brain: () -> SemanticBrain,
     private val speech: SpeechIO,
-    private val language: Language = Language.ENGLISH,
+    /** Resolved per press, so switching language needs no restart. */
+    private val language: () -> Language = { Language.ENGLISH },
 ) {
 
-    /** For a brain that never changes — tests, and any single-engine caller. */
+    /** For a brain and language that never change — tests, single-engine callers. */
     constructor(
         frames: FrameSource,
         brain: SemanticBrain,
         speech: SpeechIO,
         language: Language = Language.ENGLISH,
-    ) : this(frames, { brain }, speech, language)
+    ) : this(frames, { brain }, speech, { language })
 
     /**
      * Handle one press. Returns what was spoken, so callers (and tests) can see
@@ -57,7 +58,7 @@ class Orchestrator(
             FALLBACK
         }
 
-        speech.speak(text, language)
+        speech.speak(text, language())
         return text
     }
 

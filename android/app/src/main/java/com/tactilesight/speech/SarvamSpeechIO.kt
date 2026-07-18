@@ -97,8 +97,11 @@ class SarvamSpeechIO(
     private companion object {
         const val ENDPOINT = "https://api.sarvam.ai/text-to-speech"
         const val AUTH_HEADER = "api-subscription-key"
-        const val MODEL = "bulbul:v2"
-        const val SPEAKER = "anushka"
+        // v3 is the current model; v2 and v3-beta are also accepted. Speakers
+        // are NOT shared between them — v2's "anushka" is rejected by v3 with
+        // "not compatible with model bulbul:v3", so the pair moves together.
+        const val MODEL = "bulbul:v3"
+        const val SPEAKER = "ritu"
         const val TIMEOUT_MS = 15_000
     }
 }

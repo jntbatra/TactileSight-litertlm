@@ -122,7 +122,11 @@ class GenieXBrain(
         // QAIRT appears not to accumulate (it reports n_past=0 and repeats
         // byte-identical answers), but that is its behaviour, not our
         // guarantee, and llama_cpp need not match it. Cheap to make certain.
-        model.reset()
+        // reset() returns a status code the SDK does not force you to look at.
+        // Ignoring it is how "we call reset" turns into "we call reset and it
+        // quietly does nothing".
+        val resetCode = model.reset()
+        Log.i(TAG, "reset -> $resetCode")
 
         val imagePath = writeFrameForVlm(frame)
 

@@ -53,6 +53,14 @@ class Settings(context: Context) {
         set(value) = prefs.edit().putString(KEY_PROMPT, value).apply()
 
     /**
+     * The spoken language. Chosen at setup and persisted — it is the user's
+     * language, not a per-session choice.
+     */
+    var language: Language
+        get() = Language.fromCode(prefs.getString(KEY_LANGUAGE, null))
+        set(value) = prefs.edit().putString(KEY_LANGUAGE, value.sarvamCode).apply()
+
+    /**
      * When on, imagery must not leave the device to a third party (hard rule
      * #7). Enforced in brain resolution, not in the UI — see [effectiveMode].
      */
@@ -93,6 +101,7 @@ class Settings(context: Context) {
         const val KEY_CLOUD_MODEL = "cloud_model"
         const val KEY_PRIVACY = "privacy_mode"
         const val KEY_PROMPT = "custom_prompt"
+        const val KEY_LANGUAGE = "language"
 
         /** The laptop tier's default port, per server/README. */
         const val DEFAULT_PRIVATE_URL = "http://192.168.1.100:8000"

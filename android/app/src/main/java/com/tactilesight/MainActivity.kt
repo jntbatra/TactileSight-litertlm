@@ -21,6 +21,7 @@ import com.tactilesight.core.BrainMode
 import com.tactilesight.core.BrowsableFrameSource
 import com.tactilesight.core.Frame
 import com.tactilesight.core.FrameSource
+import com.tactilesight.core.Language
 import com.tactilesight.core.Orchestrator
 import com.tactilesight.databinding.ActivityMainBinding
 import com.tactilesight.frame.BundledCaptureSource
@@ -30,6 +31,7 @@ import com.tactilesight.frame.FramePage
 import com.tactilesight.frame.FramePagerAdapter
 import com.tactilesight.frame.FrameSourceKind
 import com.tactilesight.speech.SarvamSpeechIO
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -63,11 +65,15 @@ class MainActivity : AppCompatActivity() {
             // Owned by the Application, so rotation never drops the model.
             brain = { (application as TactileSightApp).brain },
             speech = SarvamSpeechIO(cacheDir),
+            // Resolved per press, like the brain: changing language must not
+            // need a restart, and must not reload a multi-gigabyte model.
+            language = { (application as TactileSightApp).settings.language },
         )
 
         setUpCarousel()
         setUpSourcePicker()
         setUpBrainPicker()
+        setUpLanguagePicker()
         setUpScenePicker()
 
         if (BuildConfig.SARVAM_API_KEY.isBlank()) {
@@ -185,6 +191,28 @@ class MainActivity : AppCompatActivity() {
         showBrain()
     }
 
+    /**
+     * Every language Sarvam speaks. Switching takes effect on the next press
+     * with no model reload — the VLM always answers in English and the language
+     * is applied at speech time (ADR-0012), which is what makes 23 languages
+     * cost the same as one.
+     */
+    private fun setUpLanguagePicker() {
+        val app = application as TactileSightApp
+        val languages = Language.entries
+
+        binding.languageSpinner.adapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_dropdown_item,
+            languages.map { it.displayName },
+        )
+        binding.languageSpinner.setSelection(languages.indexOf(app.settings.language))
+
+        binding.languageSpinner.onSelect { position ->
+            app.settings.language = languages[position]
+        }
+    }
+
     private fun showEndpointFor(mode: BrainMode) {
         val app = application as TactileSightApp
         binding.endpointField.visibility =
@@ -220,6 +248,11 @@ class MainActivity : AppCompatActivity() {
         binding.status.text = getString(R.string.status_working)
         lifecycleScope.launch {
             try {
+                // The previous process's multi-gigabyte mapping is still being
+                // reclaimed for a few seconds after a force-stop, and loading
+                // into that window fails with a bare "Model loading failed".
+                // Nothing to do but let the kernel catch up.
+                delay(SETTLE_BEFORE_SWEEP_MS)
                 PromptBenchmark.run(brain, browsable)
                 binding.status.text = "Prompt sweep done — see logcat"
             } catch (e: Exception) {
@@ -355,5 +388,6 @@ class MainActivity : AppCompatActivity() {
     private companion object {
         const val TAG = "MainActivity"
         const val EXTRA_SWEEP = "sweep"
+        const val SETTLE_BEFORE_SWEEP_MS = 8_000L
     }
 }
