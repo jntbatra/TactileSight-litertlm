@@ -76,7 +76,7 @@ class TactileSightApp : Application() {
 
     /** Everything that decides which brain we need. Same key, same brain. */
     private fun configurationKey(mode: BrainMode): String = when (mode) {
-        BrainMode.ON_DEVICE_NPU, BrainMode.ON_DEVICE_GPU -> mode.name
+        BrainMode.ON_DEVICE_NPU -> mode.name
         BrainMode.PRIVATE_SERVER ->
             "${mode.name}|${settings.privateServerUrl}|${settings.privateServerIsOpenAi}|" +
                 settings.privateServerModel
@@ -90,7 +90,6 @@ class TactileSightApp : Application() {
      */
     private fun brainFor(mode: BrainMode): SemanticBrain = when (mode) {
         BrainMode.ON_DEVICE_NPU -> onDeviceBrain(ModelStore.Engine.GENIEX)
-        BrainMode.ON_DEVICE_GPU -> onDeviceBrain(ModelStore.Engine.GENIEX_GGUF)
 
         // Our own machine. Two kinds of server land here and they speak
         // different wires, so the Check button probes and remembers which:

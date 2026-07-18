@@ -69,11 +69,43 @@ The band captures and buzzes; it runs no AI. The phone does all the thinking. Th
 
 ## Technology
 
-- **On-device vision-language models** on the Snapdragon NPU, via three runtimes we are measuring against each other (**LiteRT-LM**, **Qualcomm GenieX**, and **ExecuTorch + QNN**), because which one truly reaches the Hexagon NPU is an empirical question, not a marketing one.
+- **On-device vision-language models** on the Snapdragon NPU. Which runtime truly reaches the Hexagon NPU was an empirical question, not a marketing one — so we measured all of them (see below) and shipped the winner: **Qwen3-VL-4B on Qualcomm GenieX/QAIRT**, describing a scene in **260 ms**.
 - **Object detection** (YOLOv11, Qualcomm AI Hub) on the NPU, for the fast spatial lane.
 - **Depth sensing** via Orbbec Astra Pro Plus; haptics driven on-band.
 - **Speech** via Sarvam for Indic translation, text-to-speech and speech recognition.
 - **Qualcomm silicon end to end**: Snapdragon 8 Elite in the phone, Dragonwing in the band, Snapdragon X Elite serving the fallback tier.
+
+---
+
+## Measured performance
+
+Every number below is from the OnePlus 15 (Snapdragon 8 Elite Gen 5 / SM8850), same capture, same prompt, taken with the runtime's own profiler. Nothing here is estimated.
+
+### On-device execution paths
+
+| runtime / compute unit | model | model load (once) | time to first token | prefill | decode |
+|---|---|---|---|---|---|
+| **GenieX QAIRT / NPU** ← shipped | Qwen3-VL-4B w4a16 | **6.7–7.2 s** | **260 ms** | **1287 tok/s** | 24–28 tok/s |
+| GenieX llama.cpp / NPU (Hexagon) | Gemma-4-E4B q4_0 QAT | 29.2 s | 2688 ms | 142 tok/s | 13.5 tok/s |
+| GenieX llama.cpp / GPU (Adreno) | Gemma-4-E4B q4_0 QAT | 27–32 s | 3417 ms | 93 tok/s | 11.5–16.7 tok/s |
+| GenieX llama.cpp / HYBRID | Gemma-4-E4B q4_0 QAT | 31.2 s | 4087 ms | 94 tok/s | 13.3 tok/s |
+
+**QAIRT on the NPU is an order of magnitude ahead** — 13× faster to first token than the GPU, 9× the prefill throughput, and it loads in a quarter of the time. That is the path the app ships on.
+
+Two findings worth stating plainly, because both were open questions:
+
+- **llama.cpp genuinely does reach Hexagon.** A community GGUF runs on the NPU with no QAIRT bundle, ~27% better first-token latency than the GPU. It matters because QAIRT only loads architectures it has a compiled factory for — currently two — so this is the route for everything else.
+- **HYBRID is the slowest option.** It matches the GPU on throughput and adds ~20% latency: split-execution overhead with no benefit here.
+
+### End-to-end, one button press
+
+| stage | time |
+|---|---|
+| describe (on-device, NPU) | 0.26 s |
+| translate to the user's language | ~0.7 s |
+| speech synthesis and playback | ~0.5 s |
+
+Vision never leaves the phone. Only the answer *text* goes to Sarvam for translation and speech.
 
 ---
 
@@ -82,13 +114,17 @@ The band captures and buzzes; it runs no AI. The phone does all the thinking. Th
 An honest snapshot of a hackathon build in progress.
 
 **Validated:**
-- On-device vision-language inference **running on the Snapdragon 8 Elite** (measured: 71 tok/s prefill, 11 tok/s decode on a 4B-class model via the GPU path)
-- **21 real captures** from the band's camera, verified as metric depth (0.45–9.94 m) with the IR/depth alignment confirmed
-- The cloud fallback tier, proven end to end
+- **On-device VLM on the Hexagon NPU**, 260 ms to first token — the central claim, measured (see above)
+- **All four compute paths benchmarked**: QAIRT/NPU, llama.cpp on NPU, GPU and HYBRID
+- **Sign reading**: the model reads text off doors and signage — *"a sign that says \"ELEVATOR\""*, *"MAJOR HAZARD — ELECTRICITY & ROTATING PARTS"* — which is what makes a corridor navigable rather than merely described
+- **21 real captures** from the band's camera, verified as metric depth (0.45–9.94 m)
+- **RGB↔depth geometry solved**: the colour frame is cropped to the region depth can actually measure, from measured intrinsics rather than the vendor's calibration file, which is wrong above 640×480
+- **Speech in 11 Indian languages**, translated then spoken, on Sarvam
+- **Three inference destinations** — on-device, a private server, and Qualcomm Cloud AI 100 — with privacy mode enforced where the brain is chosen, not in the UI
 
-**In progress:** the phone application, rebuilt around the three-engine architecture. Work is tracked as [19 issues](../../issues), each a vertical slice with acceptance criteria.
+**In progress:** live band integration; per-object distance from depth (#6, #8).
 
-**Not yet proven:** which runtime actually reaches the NPU (that is [#16](../../issues/16)), and live band integration. The phone-camera path stands on its own without it.
+**Not yet proven:** ExecuTorch as a fourth runtime (#14); on-device OCR (#20) — the VLM reads signs well, but not reliably enough on every engine to call it solved.
 
 ---
 

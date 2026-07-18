@@ -98,14 +98,14 @@ class Settings(context: Context) {
     fun urlFor(mode: BrainMode): String = when (mode) {
         BrainMode.PRIVATE_SERVER -> privateServerUrl
         BrainMode.CLOUD -> cloudUrl
-        BrainMode.ON_DEVICE_NPU, BrainMode.ON_DEVICE_GPU -> ""
+        BrainMode.ON_DEVICE_NPU -> ""
     }
 
     fun setUrlFor(mode: BrainMode, url: String) {
         when (mode) {
             BrainMode.PRIVATE_SERVER -> privateServerUrl = url
             BrainMode.CLOUD -> cloudUrl = url
-            BrainMode.ON_DEVICE_NPU, BrainMode.ON_DEVICE_GPU -> Unit
+            BrainMode.ON_DEVICE_NPU -> Unit
         }
     }
 

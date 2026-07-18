@@ -91,7 +91,10 @@ class MainActivity : AppCompatActivity() {
 
         // adb shell am start -n <pkg>/.MainActivity --ez hexagon true
         // Answers one question: will llama_cpp drive a GGUF on the Hexagon NPU?
-        if (intent?.getBooleanExtra(EXTRA_HEXAGON, false) == true) runHexagonProbe()
+        // --es unit npu|gpu|hybrid|cpu picks which one to drive.
+        if (intent?.getBooleanExtra(EXTRA_HEXAGON, false) == true) {
+            runHexagonProbe(intent?.getStringExtra(EXTRA_UNIT) ?: "npu")
+        }
     }
 
     private fun setUpSourcePicker() {
@@ -329,7 +332,7 @@ class MainActivity : AppCompatActivity() {
      * puts a community GGUF on the NPU — QAIRT will only take architectures it
      * has a compiled factory for.
      */
-    private fun runHexagonProbe() {
+    private fun runHexagonProbe(unit: String) {
         val app = application as TactileSightApp
         val bundle = ModelStore(this)
             .available(ModelStore.Engine.GENIEX_GGUF)
@@ -341,11 +344,16 @@ class MainActivity : AppCompatActivity() {
         binding.status.text = getString(R.string.status_working)
         lifecycleScope.launch {
             delay(SETTLE_BEFORE_SWEEP_MS)
+            val computeUnit = ComputeUnitValue.entries
+                .firstOrNull { it.value.equals(unit, ignoreCase = true) }
+                ?: ComputeUnitValue.NPU
+            Log.i(TAG, "probe: llama_cpp on ${computeUnit.value}")
+
             val brain = GenieXBrain(
                 context = applicationContext,
                 modelDir = bundle,
                 runtime = RuntimeIdValue.LLAMA_CPP,
-                computeUnit = ComputeUnitValue.NPU,
+                computeUnit = computeUnit,
             )
             try {
                 // Replace the resident brain so we never hold two models.
@@ -504,5 +512,6 @@ class MainActivity : AppCompatActivity() {
         const val EXTRA_SWEEP = "sweep"
         const val SETTLE_BEFORE_SWEEP_MS = 8_000L
         const val EXTRA_HEXAGON = "hexagon"
+        const val EXTRA_UNIT = "unit"
     }
 }
