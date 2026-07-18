@@ -31,6 +31,10 @@ android {
         versionName = "0.1"
 
         buildConfigField("String", "SARVAM_API_KEY", "\"$sarvamApiKey\"")
+
+        // QAIRT/Hexagon ships arm64 only; other ABIs would bloat the APK with
+        // libs that cannot run the model anyway.
+        ndk { abiFilters += "arm64-v8a" }
     }
 
     buildFeatures {
@@ -42,6 +46,16 @@ android {
         // Depth is read straight out of the APK; leaving it uncompressed avoids
         // inflating 600 KB per capture on every load.
         noCompress += "npy"
+    }
+
+    packaging {
+        jniLibs {
+            // GenieX dlopen()s its plugins by path at runtime. With the modern
+            // default (libs left compressed inside the APK) the loader is handed
+            // "base.apk!/lib/arm64-v8a/libgeniex.so", which is not a real file,
+            // and geniex_init dies. The previous app lost time to exactly this.
+            useLegacyPackaging = true
+        }
     }
 
     compileOptions {
@@ -72,6 +86,11 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("androidx.viewpager2:viewpager2:1.1.0")
+
+    // GenieX — Qualcomm's on-device LLM/VLM runtime. Carries both backends as
+    // native libs: libgeniex_plugin_qairt.so (Hexagon NPU, via libQnnHtpV81.so
+    // for 8 Elite Gen 5) and libgeniex_plugin_llama_cpp.so (GPU/CPU fallback).
+    implementation("com.qualcomm.qti:geniex-android:0.3.1")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
