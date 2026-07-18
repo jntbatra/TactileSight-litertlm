@@ -171,11 +171,14 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.modelField.doAfterTextChanged { text ->
-            if (app.settings.effectiveMode == BrainMode.CLOUD) {
-                app.settings.cloudModel = text?.toString().orEmpty()
-                app.applyMode(BrainMode.CLOUD)
-                showBrain()
+            val typed = text?.toString().orEmpty()
+            when (app.settings.effectiveMode) {
+                BrainMode.CLOUD -> app.settings.cloudModel = typed
+                BrainMode.PRIVATE_SERVER -> app.settings.privateServerModel = typed
+                else -> return@doAfterTextChanged
             }
+            app.applyMode(app.settings.effectiveMode)
+            showBrain()
         }
 
         // Show the prompt that will actually be sent, so it can be read and
@@ -235,17 +238,28 @@ class MainActivity : AppCompatActivity() {
         binding.status.setText(R.string.checking_server)
         lifecycleScope.launch {
             binding.status.text = when (val result = ServerCheck.probe(url)) {
-                is ServerCheck.Result.Ready ->
+                is ServerCheck.Result.Ready -> {
+                    app.settings.privateServerIsOpenAi = false
                     "Server ready · backend: ${result.backend}"
+                }
 
-                is ServerCheck.Result.WrongContract ->
-                    "Reachable, but it does not speak /v1/describe — this looks " +
-                        "like LM Studio or llama-server. Run server/app.py in front " +
-                        "of it. Models: ${result.models.joinToString()}"
+                // Not an error: an OpenAI-compatible server is a supported
+                // private tier. Remember it so Describe uses that wire, and
+                // preselect a model so the next press works without typing.
+                is ServerCheck.Result.OpenAiCompatible -> {
+                    app.settings.privateServerIsOpenAi = true
+                    if (app.settings.privateServerModel !in result.models) {
+                        app.settings.privateServerModel = result.models.first()
+                        binding.modelField.setText(result.models.first())
+                    }
+                    "OpenAI-compatible server · using ${app.settings.privateServerModel}" +
+                        "\nAvailable: ${result.models.joinToString()}"
+                }
 
                 is ServerCheck.Result.Unreachable ->
                     "Cannot reach it — ${result.detail}"
             }
+            app.applyMode(app.settings.mode)
             Log.i(TAG, binding.status.text.toString())
         }
     }
@@ -258,15 +272,21 @@ class MainActivity : AppCompatActivity() {
             if (mode.sendsImageryOffDevice) View.VISIBLE else View.GONE
         // Only the cloud needs a model named: the private server picks its own
         // via TS_VLM_BACKEND, and on-device uses whatever is staged.
+        // Both server modes need a model named; on-device uses what is staged.
         binding.modelField.visibility =
-            if (mode == BrainMode.CLOUD) View.VISIBLE else View.GONE
+            if (mode.sendsImageryOffDevice) View.VISIBLE else View.GONE
 
         val savedUrl = app.settings.urlFor(mode)
         if (binding.endpointField.text.toString() != savedUrl) {
             binding.endpointField.setText(savedUrl)
         }
-        if (binding.modelField.text.toString() != app.settings.cloudModel) {
-            binding.modelField.setText(app.settings.cloudModel)
+        val savedModel = if (mode == BrainMode.CLOUD) {
+            app.settings.cloudModel
+        } else {
+            app.settings.privateServerModel
+        }
+        if (binding.modelField.text.toString() != savedModel) {
+            binding.modelField.setText(savedModel)
         }
     }
 

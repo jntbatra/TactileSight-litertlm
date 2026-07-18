@@ -39,18 +39,17 @@ import java.net.URL
 class ImagineBrain(
     private val baseUrl: String,
     private val model: String,
+    /** Blank for a local server — LM Studio and llama-server want no auth. */
     private val apiKey: String = BuildConfig.CIRRASCALE_API_KEY,
     private val promptOverride: () -> String? = { null },
+    /** What to call this in the UI — the same wire serves two destinations. */
+    private val label: String = "Cloud AI 100",
 ) : SemanticBrain {
 
-    override val name: String = "Cloud AI 100 ($model)"
+    override val name: String = "$label ($model)"
 
     override suspend fun describe(frame: Frame, question: String?): Answer =
         withContext(Dispatchers.IO) {
-            require(apiKey.isNotBlank()) {
-                "Cirrascale key missing — set cirrascale.api.key in android/local.properties"
-            }
-
             // The same crop every other brain sees, so the destination does not
             // change what the model is looking at.
             val jpeg = DepthCoverage.cropToMeasurableRegion(frame.rgbJpeg)
@@ -87,7 +86,9 @@ class ImagineBrain(
                 connectTimeout = TIMEOUT_MS
                 readTimeout = TIMEOUT_MS
                 setRequestProperty("Content-Type", "application/json")
-                setRequestProperty("Authorization", "Bearer $apiKey")
+                // LM Studio and llama-server want no auth at all; sending an
+                // empty bearer token is a 401 waiting to happen.
+                if (apiKey.isNotBlank()) setRequestProperty("Authorization", "Bearer $apiKey")
             }
 
             try {

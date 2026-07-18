@@ -77,7 +77,9 @@ class TactileSightApp : Application() {
     /** Everything that decides which brain we need. Same key, same brain. */
     private fun configurationKey(mode: BrainMode): String = when (mode) {
         BrainMode.ON_DEVICE_NPU, BrainMode.ON_DEVICE_GPU -> mode.name
-        BrainMode.PRIVATE_SERVER -> "${mode.name}|${settings.privateServerUrl}"
+        BrainMode.PRIVATE_SERVER ->
+            "${mode.name}|${settings.privateServerUrl}|${settings.privateServerIsOpenAi}|" +
+                settings.privateServerModel
         BrainMode.CLOUD -> "${mode.name}|${settings.cloudUrl}|${settings.cloudModel}"
     }
 
@@ -90,11 +92,33 @@ class TactileSightApp : Application() {
         BrainMode.ON_DEVICE_NPU -> onDeviceBrain(ModelStore.Engine.GENIEX)
         BrainMode.ON_DEVICE_GPU -> onDeviceBrain(ModelStore.Engine.GENIEX_GGUF)
 
-        // Our own server, speaking our frozen /v1/describe contract.
-        BrainMode.PRIVATE_SERVER -> settings.privateServerUrl.ifBlank {
-            Log.w(TAG, "no URL set for $mode — falling back to the stub brain")
-            return StubBrain()
-        }.let { CloudBrain(baseUrl = it, name = mode.displayName) }
+        // Our own machine. Two kinds of server land here and they speak
+        // different wires, so the Check button probes and remembers which:
+        //   server/app.py  -> POST /v1/describe   (the frozen contract)
+        //   LM Studio etc. -> POST /v1/chat/completions
+        // Talking to LM Studio directly is the simpler setup and needs no
+        // FastAPI layer, which matters when the server is not ours to change.
+        BrainMode.PRIVATE_SERVER -> {
+            val url = settings.privateServerUrl
+            when {
+                url.isBlank() -> {
+                    Log.w(TAG, "no URL set for $mode — falling back to the stub brain")
+                    StubBrain()
+                }
+
+                settings.privateServerIsOpenAi -> ImagineBrain(
+                    baseUrl = url,
+                    model = settings.privateServerModel,
+                    // A local server wants no auth; an empty bearer token is a
+                    // 401 waiting to happen.
+                    apiKey = "",
+                    promptOverride = { settings.customPrompt },
+                    label = mode.displayName,
+                )
+
+                else -> CloudBrain(baseUrl = url, name = mode.displayName)
+            }
+        }
 
         // Cirrascale's Imagine API, reached directly. Deliberately not routed
         // through our server: the three destinations must fail independently.

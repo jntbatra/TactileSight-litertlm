@@ -14,11 +14,10 @@ import java.net.URL
  *
  * - `GET /health` → `{status, backend}` — our `server/app.py`. Ready.
  * - `GET /v1/models` → `{data:[{id}]}` — an OpenAI-compatible server such as
- *   LM Studio, llama-server or vLLM. **Reachable but wrong**: it answers
- *   `/v1/models` happily and then 404s on `POST /v1/describe`, so the endpoint
- *   looks alive while every press fails. Saying so plainly here is the whole
- *   point — otherwise that failure surfaces as a dead press with no
- *   explanation.
+ *   LM Studio, llama-server or vLLM. Also supported: the phone speaks
+ *   chat/completions to it directly, which needs no FastAPI layer and matters
+ *   when the server is not ours to change. The caller records which shape
+ *   answered, because the wire format must be decided before a press.
  */
 object ServerCheck {
 
@@ -26,8 +25,11 @@ object ServerCheck {
         /** Our server, speaking the frozen contract. */
         data class Ready(val backend: String) : Result
 
-        /** Alive, but it does not implement `/v1/describe`. */
-        data class WrongContract(val models: List<String>) : Result
+        /**
+         * An OpenAI-compatible server (LM Studio, llama-server, vLLM).
+         * Supported, not a failure — the phone speaks chat/completions to it.
+         */
+        data class OpenAiCompatible(val models: List<String>) : Result
 
         data class Unreachable(val detail: String) : Result
     }
@@ -46,7 +48,7 @@ object ServerCheck {
             val models = json.optJSONArray("data")?.let { array ->
                 (0 until array.length()).mapNotNull { array.optJSONObject(it)?.optString("id") }
             }.orEmpty()
-            if (models.isNotEmpty()) return@withContext Result.WrongContract(models)
+            if (models.isNotEmpty()) return@withContext Result.OpenAiCompatible(models)
         }
 
         Result.Unreachable("No /health or /v1/models at $root")

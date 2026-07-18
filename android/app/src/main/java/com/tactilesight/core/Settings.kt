@@ -39,6 +39,22 @@ class Settings(context: Context) {
         set(value) = prefs.edit().putString(KEY_CLOUD_MODEL, value.trim()).apply()
 
     /**
+     * Whether the private server speaks OpenAI `chat/completions` (LM Studio,
+     * llama-server, vLLM) rather than our `/v1/describe` contract.
+     *
+     * Set by the Check button, which probes both. Remembered because the wire
+     * format has to be decided before a press, not during one.
+     */
+    var privateServerIsOpenAi: Boolean
+        get() = prefs.getBoolean(KEY_PRIVATE_OPENAI, false)
+        set(value) = prefs.edit().putBoolean(KEY_PRIVATE_OPENAI, value).apply()
+
+    /** Which model the private server should run, when it is OpenAI-style. */
+    var privateServerModel: String
+        get() = prefs.getString(KEY_PRIVATE_MODEL, "").orEmpty()
+        set(value) = prefs.edit().putString(KEY_PRIVATE_MODEL, value.trim()).apply()
+
+    /**
      * A prompt typed in the app, overriding [com.tactilesight.brain.VlmPrompt].
      * Blank means "use the built-in one".
      *
@@ -102,6 +118,8 @@ class Settings(context: Context) {
         const val KEY_PRIVACY = "privacy_mode"
         const val KEY_PROMPT = "custom_prompt"
         const val KEY_LANGUAGE = "language"
+        const val KEY_PRIVATE_OPENAI = "private_server_is_openai"
+        const val KEY_PRIVATE_MODEL = "private_server_model"
 
         /** The laptop tier's default port, per server/README. */
         const val DEFAULT_PRIVATE_URL = "http://192.168.1.100:8000"
