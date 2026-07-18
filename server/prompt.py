@@ -13,24 +13,32 @@ deliberately mirrors it — see TEAM.md, "the prompt lives server-side".
 Three phrases below are load-bearing. They read like ordinary wording and
 are not; each was added to fix a failure we watched happen:
 
-1. "including any objects or animals on the floor" — without it the model
-   fixates on large background objects (a window, a bookshelf) and skips a
-   small subject in the foreground. The case that found this was a cat
-   sitting in the walking path — exactly what a walking user needs to hear.
+1. "any objects or animals on the floor" — without it the model fixates on
+   large background objects (a window, a bookshelf) and skips a small subject
+   in the foreground. The case that found this was a cat sitting in the walking
+   path — exactly what a walking user needs to hear.
 2. "Only describe what is really there" — paired with a low temperature,
    this is what stops it inventing people and animals in an empty corridor.
-3. "Read out any sign, board or written text" — a description that names a
+3. "Read out any sign, board or written text, especially directions and danger
+   warnings" — a description that names a
    door but not the "WASHROOM" written on it is not navigation, it is
    scenery. Measured on real captures: Gemma read the sign as "washroom",
    Qwen3-VL said only "a sign", so this is worth asking for explicitly and
    is worth re-checking per model. It also interacts with #20 (on-device
    OCR): if the VLM reads signs well enough, #20 shrinks; if it only spots
    them, #20 stays a separate capability.
-4. "Do not mention distance" — hard rule #3. The VLM cannot measure, and a
+4. "Never state a distance" — hard rule #3. The VLM cannot measure, and a
    guessed "about two metres" sounds, when spoken aloud, identical to one
    the depth sensor actually measured. Distance is appended by the phone
    from depth, or the phone says "distance unknown". A model that guesses
    distance silently destroys that guarantee.
+
+A fifth property is the length itself. This prompt is deliberately shorter
+than an earlier draft that carried the same requirements in eight sentences:
+a reasoning model given an elaborate multi-rule prompt narrates its thinking
+first and can exhaust its token budget before answering at all. Measured
+against gemma-4-12b-qat, which returned `content: ""` with 61 reasoning
+tokens. Adding a rule here has a cost; spend it deliberately.
 """
 
 SYSTEM_PROMPT = (
@@ -75,9 +83,11 @@ def build_prompt(mode: str, question: str | None, language: str) -> str:
 
     # DESCRIBE
     return (
-        "In one short sentence, say what is ahead, including any objects or animals "
-        "on the floor, and whether each is on the left, center, or right. "
-        "Read out any sign, board or written text you can see. "
-        "Name the things directly, no preamble. "
-        f"Only describe what is really there. Do not mention distance. Answer in {language}."
+        "You are guiding a blind person. In one short, natural sentence, say what is ahead, "
+        'using "in front of you", "to your left", "to your right". '
+        "Lead with whatever affects their next step: obstacles, people, doorways, stairs, "
+        "and any objects or animals on the floor. "
+        "Read out any sign, board or written text, especially directions and danger warnings. "
+        "Group related things into one phrase rather than listing them. No preamble. "
+        f"Only describe what is really there. Never state a distance. Answer in {language}."
     )

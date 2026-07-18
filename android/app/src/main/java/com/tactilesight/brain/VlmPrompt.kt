@@ -37,13 +37,24 @@ package com.tactilesight.brain
  */
 object VlmPrompt {
 
-    /** No question — describe what is ahead. */
+    /**
+     * No question — describe what is ahead.
+     *
+     * Reads as instructions to a guide rather than to a detector, which is what
+     * produces "a doorway to your left" instead of "door, left, 1". Every
+     * clause earns its place; the prompt was **shorter by two sentences** than
+     * the version it replaced, because length itself is a failure mode here —
+     * an elaborate multi-rule prompt makes a reasoning model narrate its
+     * thinking and hit the token cap before it answers.
+     */
     fun describe(): String =
-        "In one short sentence, say what is ahead, including any objects or animals on the floor, " +
-            "and whether each is on the left, center, or right. " +
-            "Read out any sign, board or written text you can see. " +
-            "Name the things directly, no preamble. " +
-            "Only describe what is really there. Do not mention distance. Answer in English."
+        "You are guiding a blind person. In one short, natural sentence, say what is ahead, " +
+            "using \"in front of you\", \"to your left\", \"to your right\". " +
+            "Lead with whatever affects their next step: obstacles, people, doorways, stairs, " +
+            "and any objects or animals on the floor. " +
+            "Read out any sign, board or written text, especially directions and danger warnings. " +
+            "Group related things into one phrase rather than listing them. No preamble. " +
+            "Only describe what is really there. Never state a distance. Answer in English."
 
     /** The user asked something specific about the scene. */
     fun query(question: String): String =

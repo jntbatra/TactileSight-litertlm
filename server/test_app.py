@@ -99,11 +99,18 @@ def test_prompt_carries_the_requested_language():
 
 def test_prompt_never_asks_for_distance():
     """Hard rule #3: the VLM cannot measure, so it must never be asked to
-    guess. Distance is appended by the phone from depth."""
+    guess. Distance is appended by the phone from depth.
+
+    Checks the rule rather than one phrasing — the wording is tuned often and
+    a test that pins the exact string fails on a rewrite that still forbids
+    distance, which trains people to edit the test instead of reading it."""
+    forbids = ("do not mention distance", "never state a distance")
+    invites = ("rough distance", "estimate the distance", "how far")
+
     for mode in ("DESCRIBE", "QUERY"):
         text = build_prompt(mode, "What is ahead?", "en").lower()
-        assert "do not mention distance" in text
-        assert "rough distance" not in text
+        assert any(p in text for p in forbids), f"{mode} does not forbid distance: {text}"
+        assert not any(p in text for p in invites), f"{mode} invites a distance guess: {text}"
 
 
 def test_describe_prompt_keeps_its_load_bearing_phrases():
@@ -115,3 +122,7 @@ def test_describe_prompt_keeps_its_load_bearing_phrases():
     assert "objects or animals on the floor" in text
     assert "only describe what is really there" in text
     assert "sign, board or written text" in text
+    # Length is itself load-bearing: a reasoning model given an elaborate
+    # multi-rule prompt narrates its thinking and can exhaust its token budget
+    # before answering. Measured at 61 reasoning tokens and an empty answer.
+    assert len(text.split()) < 90, f"prompt has grown to {len(text.split())} words"
