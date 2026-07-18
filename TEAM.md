@@ -134,12 +134,28 @@ Save yourself the afternoon:
   ```
 - **`pkill -f "<name>"` can kill your own shell** (its command line contains the pattern). Use `pkill -x <name>`.
 - **Depth holes are not an edge case.** Glass, dark and reflective surfaces read invalid. Test against a hole-heavy scene deliberately.
-- **RGB is 16:9, depth/IR are 4:3** — they are different sensors 24.9 mm apart, so part of the colour frame has no depth behind it. ~~Objects at the top/bottom of the RGB frame have no depth.~~ **Corrected 2026-07-18 — the vertical axis is not the constraint.** Depth's vertical FOV is **45.0°** against the 16:9 RGB's **36.5°**, so depth actually sees *more* vertically than the colour frame does. (This follows from the `fy == fx` correction below.) The real limit is **horizontal and asymmetric**: measured by projecting 1.28 M valid depth pixels from 8 captures into the colour frame, coverage is **x: 0.034–0.928, y: 0.025–0.955**. Roughly 3% lost on the left and **7% on the right** — that asymmetry *is* the 24.9 mm baseline. `calib.json`'s own note ("depth covers only the central vertical region") is wrong for the same reason. Handled in code by `DepthCoverage`, which crops the frame before the VLM sees it, so the VLM cannot describe something the phone can never measure — otherwise the two lanes disagree, and the user is told about an object that answers "distance unknown" forever.
+- **RGB is 16:9, depth/IR are 4:3** — different sensors 24.9 mm apart, so part of the colour frame has no depth behind it. **Corrected 2026-07-18, and the earlier corrections were also wrong.** Measured, not inferred: the 1280x720 colour mode is **neither a crop of the 4:3 frame nor an anamorphic scale of it** — it is a horizontally *wider*, vertically *narrower* readout. Both theories this file previously carried were false.
 
-⚠️ **Treat the crop as an estimate, not a calibration.** It is derived from `color_intrinsics_640x480`, but the captures are **1280×720**, and the relationship between those two modes is not established — `calib.json`'s 720p block is known-wrong. Three automated alignment attempts on real captures failed (ORB 10 inliers, SIFT 4, template matching at noise), because RGB↔IR is cross-modal and the IR is sparse-speckled. A visual check on `scene_1_id013` puts the two horizontal FOVs within ~5–10% of each other, which is consistent, but that is eyeballing. **A checkerboard calibration at 1280×720 would settle it.** Until then the crop is a deliberately conservative trim: over-cropping costs a little periphery, under-cropping costs confidently unanswerable descriptions, and those are not symmetric.
+  The method that worked, after three cross-modal RGB-IR attempts failed (ORB 10 inliers, SIFT 4, template matching at noise): compare the **colour camera against itself** at different resolutions over its UVC interface. Same modality, so it converges — NCC 0.98. A joint fit of 1280x960 -> 1280x720 gives sx 0.886, sy 0.887: the 4:3 frame's full width maps to only 88.6% of the 720p frame's width.
 
-Note this addresses only the *systematic* mismatch — scattered depth holes inside the region remain, and stay the job of "distance unknown". **IR brightness predicts them**: measured on the live camera, mean IR at depth holes was 185 vs 55 at valid pixels (3.4×), confirming ADR-0013's "IR saturation doubles as a depth-confidence signal".
-- **`calib.json`'s 1280×720 colour intrinsics are wrong** (`fy` assumes a stretch; 16:9 is a crop, so `fy` should equal `fx`). Irrelevant for the IR path — it needs no colour intrinsics — but don't build RGB↔depth projection on it without a proper checkerboard calibration.
+  Real 720p intrinsics, corroborated against Orbbec's datasheet to within 1.7%:
+
+  | | fx | fy | cx | cy |
+  |---|---|---|---|---|
+  | `calib.json` 1280x720 | 1090.8 | 818.1 | 635.4 | 364.3 |
+  | **measured** | **966.5** | **967.3** | **634.6** | **364.4** |
+
+  So `fy` should indeed equal `fx` (measured ratio 1.0008, square pixels) — but this file's earlier fix of `fy = fx = 1090.8` was wrong too, because **`fx` itself is off by 13%**. An Orbbec maintainer confirms the Pro Plus's high-resolution colour "is indeed not calibrated" ([OrbbecSDK_ROS2 #65](https://github.com/orbbec/OrbbecSDK_ROS2/issues/65)); `calib.json`'s 720p block is self-labelled "approximate".
+
+  Resulting coverage: **x 0.09-0.88, full height.** Horizontal is the only real constraint. The previous bounds (x 0.034-0.928, y 0.025-0.955) were computed in the **640x480** colour frame and applied to **1280x720** images — a unit mismatch, not a bad estimate — and admitted side bands containing zero depth. Handled by `DepthCoverage`, which crops the frame before the VLM sees it so the VLM cannot describe something we can never measure.
+
+- **Depth sees MORE vertically than colour, not less.** Depth V 45.0 deg against 720p colour V **40.8 deg** (not the 36.5 deg this file used to claim, which came from the bad `fy`). Measured on 3.87 M points across all 20 captures: 8.1% of depth projects above the colour frame and 4.8% below. `calib.json`'s note that "depth covers only the central vertical region" is backwards, and so was our vertical crop.
+
+- **There is no hardware depth-to-colour registration on the Pro Plus.** Colour is a UVC device (`2bc5:050f`) and depth is a separate OpenNI device (`2bc5:060f`); Orbbec states the OpenNI SDK does not support the UVC RGB camera. The depth firmware never sees colour frames, so there is nothing to register against — alignment is ours to do, by reprojection.
+
+- **⚠️ "IR brightness predicts depth holes" does not reproduce on the shipped captures.** A live session measured mean IR 185 at holes vs 55 at valid pixels (3.4x). But across the 20 captures that ship in the APK, **mean IR is 3.17/255** — the frames are essentially black — and the contrast is *inverted* (0.855). Both can be true under different exposure, but [ADR-0013](docs/adr/0013-ir-aligned-calibration-free-distance.md)'s "IR saturation doubles as a depth-confidence signal" has **no support in our own test data**, so anything built on it will not work offline. Re-measure before depending on it.
+
+- **`calib.json` is not trustworthy above 640x480.** Its 640x480 block is factory calibration; its 1280x720 block is a rescale it admits is approximate. Depth intrinsics (fx/fy 579.55, cx 317.87, cy 243.06) and `depth_to_color_extrinsics` (baseline X -24.888 mm) are fine.
 
 ---
 

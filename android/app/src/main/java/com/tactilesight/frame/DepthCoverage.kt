@@ -17,29 +17,47 @@ import java.io.ByteArrayOutputStream
  *
  * ### Where these numbers come from
  *
- * Not from the docs — they disagree and both are wrong. Measured by unprojecting
- * every valid depth pixel from 8 real captures (1.28 M points) into the colour
- * frame using `calib.json`'s depth intrinsics and the factory
- * `depth_to_color_extrinsics`, then taking the 1st–99th percentile of where they
- * land:
+ * Measured 2026-07-18, and they replace an earlier set that was wrong in both
+ * axes. Two documented theories about this camera are both false: 1280x720 is
+ * **neither** a crop of the 4:3 frame (TEAM.md) **nor** an anamorphic scale of
+ * it (`calib.json`). It is a horizontally *wider*, vertically *narrower*
+ * readout, established by comparing the colour camera against itself at
+ * different resolutions over UVC — a same-modality comparison, which converges
+ * (NCC 0.98) where three cross-modal RGB-IR attempts had failed.
+ *
+ * That gave real 720p intrinsics, corroborated against Orbbec's datasheet to
+ * within 1.7%:
  *
  * ```
- * covered width  : 0.034 .. 0.928
- * covered height : 0.025 .. 0.955
+ * measured    fx 966.5  fy 967.3  cx 634.6  cy 364.4
+ * calib.json  fx 1090.8 fy 818.1            <- wrong by 13% and 18%
  * ```
  *
- * ### What the docs get wrong
+ * `calib.json`'s 720p block is self-labelled "approximate", and an Orbbec
+ * maintainer confirms the Pro Plus's high-resolution colour "is indeed not
+ * calibrated". Reprojecting valid depth through the factory extrinsics into
+ * the *measured* intrinsics gives:
  *
- * `calib.json` says *"Depth covers only the central vertical region of the RGB
- * frame"* and TEAM.md says *"objects at the top/bottom of the RGB frame have no
- * depth"*. The vertical axis is barely the constraint: depth's vertical FOV is
- * 45.0° against the 16:9 RGB's 36.5°, so **depth actually sees more vertically
- * than the colour frame does**. (That follows from TEAM.md's own correction that
- * 720p is a crop, so `fy == fx`.)
+ * ```
+ * covered width  : 0.09 .. 0.88     (horizontal is the real constraint)
+ * covered height : full frame       (depth sees MORE vertically than colour)
+ * ```
  *
- * The real limit is **horizontal, and asymmetric**: ~3% is lost on the left and
- * ~7% on the right. That asymmetry is the 24.9 mm baseline between the sensors,
- * and no document mentions it.
+ * ### Why there is no vertical crop
+ *
+ * Depth's vertical FOV is 45.0 deg against 720p colour's 40.8 deg, so the
+ * colour frame is entirely inside depth's vertical field. Measured on 3.87 M
+ * points from all 20 captures, 8.1% of depth projects above the colour frame
+ * and 4.8% below — depth overflowing colour, not the reverse. Cropping
+ * vertically threw away frame area that *does* have depth behind it.
+ *
+ * ### The bug this replaces
+ *
+ * The previous bounds (x 0.034-0.928, y 0.025-0.955) were computed in the
+ * **640x480** colour frame and then applied to **1280x720** images. A unit
+ * mismatch, not a bad estimate. Their horizontal bands admitted regions
+ * containing *zero* depth (0.034-0.087 left, 0.881-0.928 right) — precisely
+ * the failure this class exists to prevent.
  *
  * ### What this does not fix
  *
@@ -50,15 +68,22 @@ import java.io.ByteArrayOutputStream
  * the need for "distance unknown".
  *
  * Coverage is also mildly depth-dependent (parallax grows as objects get
- * closer), so the bounds are taken conservatively across a range of scenes
- * rather than computed per frame.
+ * closer — at 0.4-0.8 m the band tightens to x 0.102-0.810), so the bounds are
+ * taken conservatively across a range of scenes rather than computed per frame.
+ * Sensitivity-tested against four intrinsic variants (measured,
+ * datasheet-implied, +/-2%): this band captures 95.7-99.1% of depth points in
+ * every case, and "no vertical crop" holds under all of them.
  */
 object DepthCoverage {
 
-    const val LEFT_FRACTION = 0.034f
-    const val RIGHT_FRACTION = 0.928f
-    const val TOP_FRACTION = 0.025f
-    const val BOTTOM_FRACTION = 0.955f
+    const val LEFT_FRACTION = 0.09f
+    const val RIGHT_FRACTION = 0.88f
+
+    // Depth's vertical field contains the colour frame's entirely, so there is
+    // nothing to trim. Kept as named constants rather than deleted: the crop is
+    // a rectangle, and a future sensor may not be so generous.
+    const val TOP_FRACTION = 0.0f
+    const val BOTTOM_FRACTION = 1.0f
 
     /** Pixel bounds of the measurable region. Pure maths — unit-tested. */
     data class Rect(val left: Int, val top: Int, val width: Int, val height: Int) {
