@@ -419,11 +419,21 @@ class MainActivity : AppCompatActivity() {
 
     /** Show a frame's three streams. Works for any source — see [DepthRenderer]. */
     private fun showFrame(frame: Frame) {
-        // Trimmed to what depth can measure — the same crop the VLM is given,
-        // so the preview shows exactly what the brain sees.
+        // All three previews are trimmed to the one region both sensors share,
+        // so flicking through the carousel compares like with like — and the
+        // colour page is byte-identical to what the VLM was given.
+        //
+        // The two crops are not the same rectangle because the sensors do not
+        // have the same field of view: colour loses its edges (depth cannot
+        // reach them), depth and IR lose their top and bottom (colour cannot
+        // see them). See DepthCoverage.COLOUR / DepthCoverage.DEPTH.
         val colour = DepthCoverage.cropToMeasurableRegion(frame.rgbJpeg).toBitmap()
         val infrared = frame.irJpeg.toBitmap()
-        val depth = DepthRenderer.render(frame.depthMillimetres)
+            ?.let { DepthCoverage.crop(it, DepthCoverage.DEPTH) }
+        val depth = DepthCoverage.crop(
+            DepthRenderer.render(frame.depthMillimetres),
+            DepthCoverage.DEPTH,
+        )
 
         pages.submit(
             listOf(

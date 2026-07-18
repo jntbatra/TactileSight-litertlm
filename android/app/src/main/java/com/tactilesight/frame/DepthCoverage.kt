@@ -76,14 +76,45 @@ import java.io.ByteArrayOutputStream
  */
 object DepthCoverage {
 
-    const val LEFT_FRACTION = 0.09f
-    const val RIGHT_FRACTION = 0.88f
+    /**
+     * Fractional crop bounds, resolution-independent so the same numbers apply
+     * to 1280x720 colour and 640x480 depth alike. Fractions, not pixels,
+     * precisely because the bug this class replaced was a unit mismatch.
+     */
+    data class Bounds(
+        val left: Float,
+        val right: Float,
+        val top: Float,
+        val bottom: Float,
+    )
 
-    // Depth's vertical field contains the colour frame's entirely, so there is
-    // nothing to trim. Kept as named constants rather than deleted: the crop is
-    // a rectangle, and a future sensor may not be so generous.
-    const val TOP_FRACTION = 0.0f
-    const val BOTTOM_FRACTION = 1.0f
+    /**
+     * The part of the **colour** frame depth can measure — trimmed horizontally,
+     * because colour's horizontal field is the wider of the two.
+     */
+    val COLOUR = Bounds(left = 0.09f, right = 0.88f, top = 0.0f, bottom = 1.0f)
+
+    /**
+     * The part of the **depth/IR** frame colour can see — trimmed vertically,
+     * because depth's vertical field is the wider of the two (45.0 deg against
+     * 720p colour's 40.8 deg).
+     *
+     * These are the *same* measurement as [COLOUR], read in the other direction:
+     * of 3.87 M depth points across all 20 captures, **8.1% project above the
+     * colour frame and 4.8% below**, which is what these fractions cut. Neither
+     * set is meaningful alone — together they name one rectangle in the world,
+     * seen by two sensors 24.9 mm apart, and that is why they live in one type.
+     *
+     * Change one axis without the other and the previews silently stop showing
+     * the same region while every number on screen still looks plausible.
+     */
+    val DEPTH = Bounds(left = 0.0f, right = 1.0f, top = 0.07f, bottom = 0.955f)
+
+    @Deprecated("Use COLOUR.left", ReplaceWith("COLOUR.left"))
+    const val LEFT_FRACTION = 0.09f
+
+    @Deprecated("Use COLOUR.right", ReplaceWith("COLOUR.right"))
+    const val RIGHT_FRACTION = 0.88f
 
     /** Pixel bounds of the measurable region. Pure maths — unit-tested. */
     data class Rect(val left: Int, val top: Int, val width: Int, val height: Int) {
@@ -91,17 +122,35 @@ object DepthCoverage {
         val bottom get() = top + height
     }
 
-    fun cropRect(imageWidth: Int, imageHeight: Int): Rect {
-        val left = (imageWidth * LEFT_FRACTION).toInt()
-        val top = (imageHeight * TOP_FRACTION).toInt()
-        val right = (imageWidth * RIGHT_FRACTION).toInt().coerceAtMost(imageWidth)
-        val bottom = (imageHeight * BOTTOM_FRACTION).toInt().coerceAtMost(imageHeight)
+    fun cropRect(imageWidth: Int, imageHeight: Int, bounds: Bounds = COLOUR): Rect {
+        val left = (imageWidth * bounds.left).toInt()
+        val top = (imageHeight * bounds.top).toInt()
+        val right = (imageWidth * bounds.right).toInt().coerceAtMost(imageWidth)
+        val bottom = (imageHeight * bounds.bottom).toInt().coerceAtMost(imageHeight)
         return Rect(
             left = left,
             top = top,
             width = (right - left).coerceAtLeast(1),
             height = (bottom - top).coerceAtLeast(1),
         )
+    }
+
+    /**
+     * Crop an already-decoded bitmap — the depth preview is rendered, never
+     * encoded, so making it round-trip through JPEG just to reuse
+     * [cropToMeasurableRegion] would cost quality for nothing.
+     *
+     * Returns the source unchanged if the crop is degenerate; a preview that is
+     * slightly wrong beats a preview that crashed.
+     */
+    fun crop(source: Bitmap, bounds: Bounds): Bitmap {
+        val rect = cropRect(source.width, source.height, bounds)
+        if (rect.width == source.width && rect.height == source.height) return source
+        return try {
+            Bitmap.createBitmap(source, rect.left, rect.top, rect.width, rect.height)
+        } catch (e: IllegalArgumentException) {
+            source
+        }
     }
 
     /**
@@ -112,7 +161,7 @@ object DepthCoverage {
     fun cropToMeasurableRegion(jpeg: ByteArray, quality: Int = 90): ByteArray {
         val source = BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size) ?: return jpeg
         return try {
-            val rect = cropRect(source.width, source.height)
+            val rect = cropRect(source.width, source.height, COLOUR)
             val cropped = Bitmap.createBitmap(source, rect.left, rect.top, rect.width, rect.height)
             ByteArrayOutputStream().use { out ->
                 cropped.compress(Bitmap.CompressFormat.JPEG, quality, out)

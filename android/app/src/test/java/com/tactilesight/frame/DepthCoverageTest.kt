@@ -47,7 +47,7 @@ class DepthCoverageTest {
     }
 
     @Test
-    fun `does not crop vertically`() {
+    fun `does not crop the colour frame vertically`() {
         // Pinned deliberately. The first version of this class cropped top and
         // bottom on the strength of a documented claim that depth covers "only
         // the central vertical region". Measurement says the opposite: depth
@@ -58,6 +58,58 @@ class DepthCoverageTest {
             assertEquals("$w x $h", 0, rect.top)
             assertEquals("$w x $h", h, rect.bottom)
         }
+    }
+
+    @Test
+    fun `crops the 640x480 depth frame vertically, not horizontally`() {
+        val rect = DepthCoverage.cropRect(640, 480, DepthCoverage.DEPTH)
+
+        // The mirror image of the colour crop. Depth sees 8.1% above the colour
+        // frame and 4.8% below, so those bands show scene the colour camera
+        // never captured — and a preview carousel that shows them is comparing
+        // two different regions while claiming to compare one.
+        assertEquals(33, rect.top)
+        assertEquals(458, rect.bottom)
+
+        // Horizontally depth is the narrower sensor, so there is nothing to trim.
+        assertEquals(0, rect.left)
+        assertEquals(640, rect.right)
+    }
+
+    @Test
+    fun `the two crops trim opposite axes — they are one measurement, read twice`() {
+        val colour = DepthCoverage.cropRect(1280, 720, DepthCoverage.COLOUR)
+        val depth = DepthCoverage.cropRect(640, 480, DepthCoverage.DEPTH)
+
+        // Colour loses width only; depth loses height only. If either ever
+        // trims both axes, someone has applied one sensor's bounds to the
+        // other's image — the exact unit-mismatch class of bug that produced
+        // the wrong bounds this class replaced.
+        assertTrue("colour should lose width", colour.width < 1280)
+        assertEquals("colour should keep full height", 720, colour.height)
+        assertEquals("depth should keep full width", 640, depth.width)
+        assertTrue("depth should lose height", depth.height < 480)
+    }
+
+    @Test
+    fun `both crops frame roughly the same shape`() {
+        val colour = DepthCoverage.cropRect(1280, 720, DepthCoverage.COLOUR)
+        val depth = DepthCoverage.cropRect(640, 480, DepthCoverage.DEPTH)
+
+        val colourAspect = colour.width.toDouble() / colour.height
+        val depthAspect = depth.width.toDouble() / depth.height
+
+        // 1.40 vs 1.51 — about 7% apart, and deliberately not asserted equal.
+        // Exact equality would be the wrong invariant: both bounds are taken
+        // conservatively across a range of scenes rather than solved per frame,
+        // and coverage is mildly depth-dependent (parallax grows as objects get
+        // closer). What must hold is that they describe the same rectangle to
+        // within the slack we chose; an order-of-magnitude drift means one side
+        // was edited alone.
+        assertTrue(
+            "aspect ratios diverged: colour $colourAspect vs depth $depthAspect",
+            kotlin.math.abs(colourAspect - depthAspect) / colourAspect < 0.12,
+        )
     }
 
     @Test
