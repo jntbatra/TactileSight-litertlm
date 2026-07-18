@@ -6,11 +6,13 @@ Haptic point-cloud navigation headband for the visually impaired. Qualcomm Snapd
 
 ### Issue tracker
 
-Issues and PRDs live as local markdown files under `.scratch/<feature-slug>/`. No external tracker; no PR triage surface. See `docs/agents/issue-tracker.md`.
+**Tickets live in GitHub Issues on this repo** (moved 2026-07-18, when the rebuild tickets were published). Each is a vertical slice with acceptance criteria and a **Blocked by** section naming the issues that gate it. Work the **frontier** — any issue whose blockers are closed.
+
+`.scratch/` still holds **PRDs, spikes and research notes** — not tickets. `docs/agents/issue-tracker.md` describes the older local-file convention, which now applies only to those.
 
 ### Triage labels
 
-Default five-role vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`), recorded as a `Status:` line in each issue file. See `docs/agents/triage-labels.md`.
+Default five-role vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). Now applied as **GitHub labels** on issues rather than a `Status:` line in a file. See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 
