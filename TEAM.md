@@ -293,12 +293,13 @@ Measured on the OnePlus 15 (SM8850), same capture, same prompt, 2026-07-18/19. A
 | **`qairt` / NPU** | Qwen3-VL-4B w4a16 | **6.7–7.2 s** | **260 ms** | **1287 tok/s** | 24–28 tok/s |
 | `llama_cpp` / **NPU** | Gemma-4-E4B q4_0 QAT | 29.2 s | 2688 ms | 142 tok/s | 13.5 tok/s |
 | `llama_cpp` / GPU | Gemma-4-E4B q4_0 QAT | 27–32 s | 3417 ms | 93 tok/s | 11.5–16.7 tok/s |
+| `llama_cpp` / HYBRID | Gemma-4-E4B q4_0 QAT | 31.2 s | 4087 ms | 94 tok/s | 11–13 tok/s |
 
 **`llama_cpp` really does reach Hexagon** — this was an open question and the answer is yes. `ComputeUnitValue.NPU` with `RuntimeIdValue.LLAMA_CPP` runs a community GGUF on the NPU through `libggml-hexagon.so`, no QAIRT bundle required. Against the GPU it is ~27% better TTFT and ~53% better prefill.
 
 **But QAIRT is an order of magnitude ahead** — 10× the TTFT, 9× the prefill, and it loads in a quarter of the time. If a QAIRT bundle exists for the architecture, use it. The ggml-Hexagon path matters for models QAIRT has no factory for (see the registry note below), which is most of them.
 
-`HYBRID` is also exposed by the SDK and is **untested**.
+`HYBRID` is **measured and is the worst of the four** — slower than either unit alone. Splitting a graph across NPU and GPU costs more in transfers than it recovers in parallelism. Do not reach for it as a "best of both".
 
 The probe that measured this is in the app: `adb shell am start -n com.tactilesight/.MainActivity --ez hexagon true`. Force-stop first — `am start` on a running activity delivers the intent to the existing instance and `onCreate` never re-runs, so the probe silently does not fire.
 
@@ -317,4 +318,25 @@ Measured on one capture, 2026-07-18 (#2):
 
 The NPU run was also the more accurate of the two. `ModelConfig`'s 12-arg positional constructor is unchanged across the upgrade, so the bump is source-compatible.
 
-**AI Hub's Gemma-4-E4B has no QAIRT bundle** — its `release_assets.json` lists only `geniex_llamacpp` (q4_0 GGUF, pointing at Google's repo). Gemma cannot reach the NPU this way; "supported on 8 Elite Gen 5" there means the GGUF runs, not that an NPU build exists.
+### Which models can run on QAIRT: check the manifest, not the architecture
+
+A QAIRT bundle is a graph **Qualcomm compiled ahead of time for one chipset**. You cannot convert a model into one. So "can model X run on QAIRT?" is answered by AI Hub's manifest for X — nothing else. Read it directly; the AI Hub web UI is JavaScript-rendered and its own `release_assets.json` URLs 404, but the Hugging Face mirror serves the same file as plain JSON:
+
+```bash
+curl -sL https://huggingface.co/qualcomm/<Model-Name>/raw/main/release_assets.json | jq
+```
+
+Checked 2026-07-19 for `qualcomm-snapdragon-8-elite-gen5`:
+
+| Model | `geniex_qairt` bundle | zip |
+|---|---|---|
+| Qwen3-VL-4B-Instruct | ✅ w4a16 | 2.9 GB |
+| Qwen3-VL-8B-Instruct | ✅ w4a16 | 5.0 GB |
+| Qwen2.5-VL-7B-Instruct | ✅ w4a16 | 4.7 GB |
+| Gemma-4-E4B-it / E2B-it | ❌ **none** | — |
+
+**`qualcomm/Gemma-4-E4B-it`'s manifest is four lines long**: one precision (`q4_0`), one runtime (`geniex_llamacpp`), and **no `chipset_assets` key at all** — it just points at Google's GGUF. Qualcomm never compiled a QAIRT Gemma-4.
+
+Note what this does **not** mean. Gemma still reaches the Hexagon NPU — via `llama_cpp` + `ComputeUnitValue.NPU`, measured above at 2688 ms. The missing QAIRT bundle costs it ~10×, but not the NPU itself. (An earlier version of this note said "Gemma cannot reach the NPU"; that was written before the `llama_cpp`/NPU measurement and was wrong.)
+
+**Practical consequence: on-device, we are limited to the Qwen VLM family.** Before getting attached to any model as an on-device candidate, read its manifest. If there is no QAIRT bundle, it belongs on the private-server tier instead.
