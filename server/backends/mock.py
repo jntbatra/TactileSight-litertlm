@@ -1,18 +1,27 @@
-"""Zero-dependency backend that proves the wire without any model.
-
-It never looks at the image. Its job is to let the phone exercise the full round trip
-(capture -> HTTP -> answer -> TTS) so that when we swap in a real backend the only new
-variable is the model. The reply echoes the image size and prompt so a human can confirm
-the bytes and prompt arrived intact.
 """
+mock backend — proves the wire (phone -> server -> speech), zero model,
+zero GPU, runs anywhere. This is the default backend.
+"""
+import asyncio
+import itertools
 
-from __future__ import annotations
+# A tiny rotation so repeated taps in a demo don't sound like a stuck record,
+# while staying fully deterministic and offline.
+#
+# None of these state a distance, deliberately. The VLM never does (hard rule
+# #3) — the phone appends distance from depth, or says "distance unknown".
+# A mock that speaks distances teaches the wrong shape to anyone reading it
+# for an example of a good answer, and makes a rule violation look normal.
+_RESPONSES = [
+    "Mock description: clear path ahead, a doorway on your left.",
+    "Mock description: a chair directly in front of you.",
+    "Mock description: open hallway ahead, no obstacles.",
+]
+_cycle = itertools.cycle(_RESPONSES)
 
 
-class MockBackend:
-    def generate(self, image_bytes: bytes, prompt: str) -> str:
-        kb = len(image_bytes) / 1024.0
-        return (
-            "A doorway is ahead in the center and a chair is on the left. "
-            f"(mock backend: received {kb:.0f} KB image, {len(prompt)} char prompt)"
-        )
+async def describe_image(image_bytes: bytes, prompt: str) -> str:
+    # Small sleep so the mock feels like a real network+inference round trip
+    # when demoing the end-to-end pipeline, without actually being slow.
+    await asyncio.sleep(0.05)
+    return next(_cycle)

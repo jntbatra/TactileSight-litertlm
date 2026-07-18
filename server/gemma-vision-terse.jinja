@@ -1,4 +1,46 @@
-{{ bos_token }}{% for message in messages %}{{ '<start_of_turn>' + (message['role'] == 'assistant' and 'model' or message['role']) + '
-' }}{% if message['content'] is string %}{{ message['content'] }}{% else %}{% for item in message['content'] %}{% if item['type'] == 'text' %}{{ item['text'] }}{% elif item['type'] == 'image' %}{{ '<|image|>' }}{% endif %}{% endfor %}{% endif %}{{ '<end_of_turn>
-' }}{% endfor %}{% if add_generation_prompt %}{{ '<start_of_turn>model
-' }}{% endif %}
+{#-
+  gemma-vision-terse.jinja
+
+  Why this file exists: llama-server's GGUF-embedded chat template for
+  Gemma 4 pulls in its "thinking"/reasoning turn scaffolding, which (a) we
+  don't want for a one-sentence spoken description and (b) has been the
+  source of load/format crashes when paired with --mmproj on some builds.
+  Passing --chat-template-file with this stripped-down template + --reasoning off
+  sidesteps both: no reasoning block is ever emitted, and the turn format
+  stays the plain Gemma <start_of_turn>/<end_of_turn> shape mmproj expects.
+
+  NOTE: some llama.cpp builds have a known issue where --chat-template-file
+  is silently ignored whenever --mmproj is also passed (the GGUF-embedded
+  template wins instead). If output still looks like it's using the
+  embedded template, upgrade llama.cpp to a build where this is fixed, or
+  check `llama-server --help` for whether --chat-template-file needs to be
+  passed before --mmproj.
+-#}
+{{ bos_token }}
+{%- for message in messages -%}
+  {%- if message['role'] == 'system' -%}
+    {#- Gemma has no native system role: fold it into the first user turn. -#}
+    {%- set system_text = message['content'] -%}
+  {%- else -%}
+    {%- set role = 'model' if message['role'] == 'assistant' else 'user' -%}
+    <start_of_turn>{{ role }}
+    {%- if role == 'user' and system_text is defined -%}
+      {{ ' ' + system_text }}
+      {%- set system_text = undefined -%}
+    {%- endif -%}
+    {%- if message['content'] is string -%}
+      {{ ' ' + message['content'] }}
+    {%- else -%}
+      {%- for part in message['content'] -%}
+        {%- if part['type'] == 'text' -%}
+          {{ ' ' + part['text'] }}
+        {%- elif part['type'] == 'image_url' -%}
+          {{ '<start_of_image>' }}
+        {%- endif -%}
+      {%- endfor -%}
+    {%- endif %}<end_of_turn>
+{% endif -%}
+{%- endfor -%}
+{%- if add_generation_prompt -%}
+<start_of_turn>model
+{% endif -%}
