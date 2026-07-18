@@ -79,7 +79,7 @@ class ImagineBrain(
                 put("stream", false)
             }.toString()
 
-            val endpoint = "${baseUrl.trimEnd('/')}$COMPLETIONS_PATH"
+            val endpoint = completionsUrl(baseUrl)
             val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
                 doOutput = true
@@ -113,10 +113,39 @@ class ImagineBrain(
             }
         }
 
+    /**
+     * Where chat/completions lives, given whatever was typed in the endpoint
+     * field.
+     *
+     * Two shapes arrive here. Cirrascale is handed with its version already in
+     * the path (`https://…/apis/v2`); LM Studio and llama-server are handed as
+     * a bare host and port (`http://10.0.0.5:1234`) and serve under `/v1`.
+     * Appending blindly gives `POST /chat/completions`, which LM Studio answers
+     * with "Unexpected endpoint… Returning 200 anyway" — a 200 carrying no
+     * answer, which reads as a broken model rather than a wrong URL.
+     */
+    private fun completionsUrl(baseUrl: String): String {
+        val root = baseUrl.trim().trimEnd('/')
+        val hasVersionPath = URL(root).path.trim('/').isNotEmpty()
+        return if (hasVersionPath) "$root$COMPLETIONS_PATH" else "$root$DEFAULT_VERSION$COMPLETIONS_PATH"
+    }
+
     companion object {
         private const val TAG = "ImagineBrain"
         private const val COMPLETIONS_PATH = "/chat/completions"
-        private const val MAX_TOKENS = 64
+
+        /** OpenAI-compatible servers serve under /v1 unless told otherwise. */
+        private const val DEFAULT_VERSION = "/v1"
+
+        /**
+         * Generous on purpose. Some served models are **reasoning** models —
+         * gemma-4-12b-qat spends its budget in `reasoning_content` first — and
+         * a tight cap returns `content: ""` with `finish_reason: length`. That
+         * looks like a broken model and is really a budget that ran out before
+         * the answer started. The prompt still asks for one short sentence, so
+         * a non-reasoning model stops long before this.
+         */
+        private const val MAX_TOKENS = 512
         private const val TEMPERATURE = 0.2
         private const val TIMEOUT_MS = 60_000
 
