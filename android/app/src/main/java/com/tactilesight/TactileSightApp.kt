@@ -50,10 +50,10 @@ class TactileSightApp : Application() {
      * Switch to [mode], releasing whatever model was resident.
      *
      * Goes through [Settings.effectiveMode], so privacy mode cannot be talked
-     * around: asking for [BrainMode.CLOUD] with privacy on lands on-device
-     * instead of off-device. Hard rule #7 says privacy must actually block the
-     * cloud, and a check that lives only in a spinner listener is one refactor
-     * away from not existing.
+     * around: asking for any off-device mode with privacy on lands on-device
+     * instead. Hard rule #7 says privacy must actually block imagery leaving
+     * the phone, and a check that lives only in a spinner listener is one
+     * refactor away from not existing.
      */
     fun applyMode(requested: BrainMode) {
         settings.mode = requested
@@ -80,7 +80,6 @@ class TactileSightApp : Application() {
         BrainMode.PRIVATE_SERVER ->
             "${mode.name}|${settings.privateServerUrl}|${settings.privateServerIsOpenAi}|" +
                 settings.privateServerModel
-        BrainMode.CLOUD -> "${mode.name}|${settings.cloudUrl}|${settings.cloudModel}"
     }
 
     /**
@@ -116,22 +115,6 @@ class TactileSightApp : Application() {
                 )
 
                 else -> CloudBrain(baseUrl = url, name = mode.displayName)
-            }
-        }
-
-        // Cirrascale's Imagine API, reached directly. Deliberately not routed
-        // through our server: the three destinations must fail independently.
-        BrainMode.CLOUD -> {
-            val model = settings.cloudModel
-            if (model.isBlank()) {
-                Log.w(TAG, "no cloud model set — falling back to the stub brain")
-                StubBrain()
-            } else {
-                ImagineBrain(
-                    baseUrl = settings.cloudUrl,
-                    model = model,
-                    promptOverride = { settings.customPrompt },
-                )
             }
         }
     }

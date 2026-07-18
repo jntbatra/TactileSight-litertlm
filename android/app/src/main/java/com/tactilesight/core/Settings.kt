@@ -24,20 +24,6 @@ class Settings(context: Context) {
         get() = prefs.getString(KEY_PRIVATE_URL, DEFAULT_PRIVATE_URL).orEmpty()
         set(value) = prefs.edit().putString(KEY_PRIVATE_URL, value.trim()).apply()
 
-    /** Qualcomm Cloud AI 100 — Cirrascale's INFERENCE_CLOUD_ENDPOINT. */
-    var cloudUrl: String
-        get() = prefs.getString(KEY_CLOUD_URL, DEFAULT_CLOUD_URL).orEmpty()
-        set(value) = prefs.edit().putString(KEY_CLOUD_URL, value.trim()).apply()
-
-    /**
-     * Which model the cloud serves. Editable because it is not ours to pin —
-     * `GET /v2/models` is the authority, and what is deployed there can change
-     * without warning.
-     */
-    var cloudModel: String
-        get() = prefs.getString(KEY_CLOUD_MODEL, "").orEmpty()
-        set(value) = prefs.edit().putString(KEY_CLOUD_MODEL, value.trim()).apply()
-
     /**
      * Whether the private server speaks OpenAI `chat/completions` (LM Studio,
      * llama-server, vLLM) rather than our `/v1/describe` contract.
@@ -90,21 +76,19 @@ class Settings(context: Context) {
      * because hard rule #4 says every press yields speech.
      *
      * Resolving it here means a stale saved preference — privacy switched on
-     * while CLOUD was selected, then a restart — cannot leak a frame.
+     * while the private server was selected, then a restart — cannot leak a frame.
      */
     val effectiveMode: BrainMode
         get() = mode.takeIf { it.isAllowedUnderPrivacy(privacyMode) } ?: BrainMode.ON_DEVICE_NPU
 
     fun urlFor(mode: BrainMode): String = when (mode) {
         BrainMode.PRIVATE_SERVER -> privateServerUrl
-        BrainMode.CLOUD -> cloudUrl
         BrainMode.ON_DEVICE_NPU -> ""
     }
 
     fun setUrlFor(mode: BrainMode, url: String) {
         when (mode) {
             BrainMode.PRIVATE_SERVER -> privateServerUrl = url
-            BrainMode.CLOUD -> cloudUrl = url
             BrainMode.ON_DEVICE_NPU -> Unit
         }
     }
@@ -113,8 +97,6 @@ class Settings(context: Context) {
         const val FILE = "tactilesight"
         const val KEY_MODE = "brain_mode"
         const val KEY_PRIVATE_URL = "private_server_url"
-        const val KEY_CLOUD_URL = "cloud_url"
-        const val KEY_CLOUD_MODEL = "cloud_model"
         const val KEY_PRIVACY = "privacy_mode"
         const val KEY_PROMPT = "custom_prompt"
         const val KEY_LANGUAGE = "language"
@@ -125,6 +107,5 @@ class Settings(context: Context) {
         const val DEFAULT_PRIVATE_URL = "http://192.168.1.100:8000"
 
         /** Cirrascale's published Imagine API endpoint. */
-        const val DEFAULT_CLOUD_URL = "https://aisuite.cirrascale.com/apis/v2"
     }
 }

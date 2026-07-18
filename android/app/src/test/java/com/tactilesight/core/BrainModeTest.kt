@@ -6,9 +6,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Privacy mode is hard rule #7: it must *actually* block the cloud, not
- * relabel the UI. These tests pin that rule to the type that expresses it,
- * so it cannot be softened by an unrelated change to a screen.
+ * Privacy mode is hard rule #7: it must *actually* block imagery leaving the
+ * phone, not relabel the UI. These tests pin that rule to the type that
+ * expresses it, so it cannot be softened by an unrelated change to a screen.
  */
 class BrainModeTest {
 
@@ -16,22 +16,29 @@ class BrainModeTest {
     fun `only on-device keeps imagery on the phone`() {
         assertFalse(BrainMode.ON_DEVICE_NPU.sendsImageryOffDevice)
         assertTrue(BrainMode.PRIVATE_SERVER.sendsImageryOffDevice)
-        assertTrue(BrainMode.CLOUD.sendsImageryOffDevice)
     }
 
     @Test
-    fun `privacy mode blocks the cloud`() {
-        assertFalse(BrainMode.CLOUD.isAllowedUnderPrivacy(privacyOn = true))
+    fun `privacy mode blocks every destination that sends imagery off-device`() {
+        // Stated over the whole enum rather than by naming modes: a destination
+        // added later is blocked by default unless it declares the frame stays
+        // put, so a new mode cannot open a privacy hole by being forgotten here.
+        BrainMode.entries
+            .filter { it.sendsImageryOffDevice }
+            .forEach { assertFalse(it.name, it.isAllowedUnderPrivacy(privacyOn = true)) }
     }
 
     @Test
-    fun `privacy mode still allows on-device and our own server`() {
-        // Our own machine is not a third party. The claim is about the
-        // destination, not the transit — a tunnel terminates TLS at its edge,
-        // which is why the LAN address is the version that is private
-        // end-to-end. See BrainMode's docs.
+    fun `privacy mode still allows on-device`() {
         assertTrue(BrainMode.ON_DEVICE_NPU.isAllowedUnderPrivacy(privacyOn = true))
-        assertTrue(BrainMode.PRIVATE_SERVER.isAllowedUnderPrivacy(privacyOn = true))
+    }
+
+    @Test
+    fun `there is always a destination left when privacy is on`() {
+        // Hard rule #4: every press yields speech. If privacy ever blocked
+        // everything, Settings.effectiveMode would fall back to a mode that is
+        // itself blocked and the press would have nowhere to go.
+        assertTrue(BrainMode.entries.any { it.isAllowedUnderPrivacy(privacyOn = true) })
     }
 
     @Test

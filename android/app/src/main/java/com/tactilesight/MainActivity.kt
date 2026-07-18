@@ -253,7 +253,6 @@ class MainActivity : AppCompatActivity() {
         binding.modelField.doAfterTextChanged { text ->
             val typed = text?.toString().orEmpty()
             when (app.settings.effectiveMode) {
-                BrainMode.CLOUD -> app.settings.cloudModel = typed
                 BrainMode.PRIVATE_SERVER -> app.settings.privateServerModel = typed
                 else -> return@doAfterTextChanged
             }
@@ -360,11 +359,7 @@ class MainActivity : AppCompatActivity() {
         if (binding.endpointField.text.toString() != savedUrl) {
             binding.endpointField.setText(savedUrl)
         }
-        val savedModel = if (mode == BrainMode.CLOUD) {
-            app.settings.cloudModel
-        } else {
-            app.settings.privateServerModel
-        }
+        val savedModel = app.settings.privateServerModel
         if (binding.modelField.text.toString() != savedModel) {
             binding.modelField.setText(savedModel)
         }
