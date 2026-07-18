@@ -19,7 +19,7 @@ The deliberate division of labour. The Band owns *where* (spatial geometry, cont
 A single user-initiated request for semantics ("what's in front of me?"). Triggers one RGB frame capture → on-device model → spoken answer. The Module acts only on a Query; it does not narrate continuously.
 
 **Scene Frame**:
-One RGB still captured at Query time and fed to the phone. Not a continuous video stream — one frame per Query keeps things cheap. The phone receives frames through a **FrameSource** seam so the producer can change without touching the pipeline: a phone-camera source for the hackathon build/demo now, and the band's wireless RGB camera **over WebRTC** as a later swap-in (a persistent live stream — "capture" is the frame *retained* on button-press, not the connection). Nothing downstream knows which source it is.
+One RGB still captured at Query time and fed to the phone. Not a continuous video stream — one frame per Query keeps things cheap. The phone receives frames through a **FrameSource** seam so the producer can change without touching the pipeline: a phone-camera source for the hackathon build/demo now, and the band's camera **over WebRTC** as a later swap-in. Nothing downstream knows which source it is. *(Updated 2026-07-18: the band swap-in delivers an **on-demand RGB+depth+IR triplet from one capture instant** over the WebRTC data channel — not the persistent live video stream described here originally. See ADR-0009 and `docs/band-interface.md`.)*
 
 **Perception stage**:
 The on-device object detector + OCR that turns a Scene Frame into structured facts: object labels, positions, and any read text. Deterministic vision, no language yet.
@@ -144,9 +144,9 @@ On-device **first** — privacy premise intact **for capable devices**; a **clou
 - **ADR-0004** (band depth sensor) → **un-gated by ADR-0009** (2026-07-18): the Astra Pro Plus supplies the color↔depth registration that made depth-fused-speech "calibration-gated." Distance is now measured by the band and spoken by the phone.
 - **ADR-0005** (model/runtime stack) → **GenieX + llama.cpp** for a **VLM**; multilingual **AI4Bharat / Sarvam Edge** speech stack; all-resident + VLM-warm.
 - **ADR-0006** (Maps fusion) → routing via **Directions API → band haptics**; phone computes / band renders; cloud-routing exception.
-- **ADR-0007** (on-demand capture) → still holds for what's *retained/processed*; the wire may stream continuously.
+- **ADR-0007** (on-demand capture) → still holds, and as of the 2026-07-18 correction to ADR-0009 it now holds **on the wire too**: the band sends imagery only in response to a `capture_request`, so nothing streams continuously. (Its "double-press Save" reference is stale — no double-press gesture survives ADR-0011.)
 - **ADR-0008** (cloud fallback tier) → **new** (2026-07-18): the two-tier on-device/cloud brain, capability-based auto-routing, and the honest "cloud fallback on a server" framing. See `docs/adr/0008-cloud-fallback-tier.md`.
-- **ADR-0009** (multi-sensor band pipeline) → **new** (2026-07-18): Astra Pro Plus RGB+depth+IR, band = capture+haptics+dumb-pipe / phone = align+detect+depth-lookup+VLM+fusion, **real distances spoken from depth** (reverses "never distance"), IR for low-light, 5 GHz AP + USB-gadget over one WebRTC PeerConnection. See `docs/adr/0009-multi-sensor-band-pipeline.md`.
+- **ADR-0009** (multi-sensor band pipeline) → **new** (2026-07-18): Astra Pro Plus RGB+depth+IR, band = capture+haptics+dumb-pipe / phone = align+detect+depth-lookup+VLM+fusion, **real distances spoken from depth** (reverses "never distance"), IR for low-light, 5 GHz AP + USB-gadget over one WebRTC PeerConnection. **Corrected same day:** the band sends **on-demand RGB+depth+IR triplets from one capture instant** over the data channel — **no continuous video track**. A low-rate dashboard preview is **optional and OPEN**, pending the band team's answer on UNO Q headroom. See `docs/adr/0009-multi-sensor-band-pipeline.md`.
 
 ### Rebuild ADRs (2026-07-18, this repo)
 
