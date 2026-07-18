@@ -1,6 +1,7 @@
 package com.tactilesight.frame
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -89,10 +90,18 @@ class NpyReaderTest {
      */
     @Test
     fun `parses a real Astra Pro Plus capture`() {
-        val file = File("src/main/assets/captures/scene_1_id001/depth_raw.npy")
-        assumeTrue("bundled capture not found at ${file.absolutePath}", file.exists())
+        val captures = File("src/main/assets/captures")
+        // Only skip when the assets are genuinely absent (e.g. a source-only
+        // checkout). If they exist, a rename must fail loudly rather than
+        // quietly skipping and still reading green.
+        assumeTrue("assets not present at ${captures.absolutePath}", captures.isDirectory)
 
-        val depth = file.inputStream().use(NpyReader::readDepthMap)
+        val file = captures.listFiles()?.sorted()?.firstNotNullOfOrNull { dir ->
+            File(dir, "depth_raw.npy").takeIf { it.exists() }
+        }
+        assertNotNull("no depth_raw.npy under ${captures.absolutePath}", file)
+
+        val depth = file!!.inputStream().use(NpyReader::readDepthMap)
 
         assertEquals(640, depth.width)
         assertEquals(480, depth.height)
@@ -110,7 +119,7 @@ class NpyReaderTest {
         assertTrue("min depth ${readings.min()} mm out of range", readings.min() >= 100)
         assertTrue("max depth ${readings.max()} mm out of range", readings.max() <= 15000)
 
-        println("scene_1_id001: ${valid * 100 / total}% valid, " +
+        println("${file.parentFile?.name}: ${valid * 100 / total}% valid, " +
             "${readings.min()}–${readings.max()} mm")
     }
 }

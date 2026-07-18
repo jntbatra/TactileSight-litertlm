@@ -18,6 +18,7 @@
     <string name="preview_depth">Depth image from the band camera</string>
 
     <string name="status_ready">Ready. Press to describe the scene.</string>
+    <string name="status_press_to_capture">Ready. Press to capture from the band.</string>
     <string name="status_working">Looking…</string>
     <string name="status_speech_failed">Could not speak — check the network connection.</string>
     <string name="status_no_key">No Sarvam API key. Add sarvam.api.key to android/local.properties.</string>

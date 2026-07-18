@@ -46,7 +46,8 @@ data class Frame(
  *
  * A zero is **not** a distance of zero, it is *no reading*: glass, dark and
  * reflective surfaces come back invalid, and valid coverage averages only 62.6%
- * across our 21 captures. Never treat an invalid pixel as a measurement.
+ * across the 21 captures ADR-0013 measured (20 of which ship here). Never treat
+ * an invalid pixel as a measurement.
  */
 data class DepthMap(
     val width: Int,

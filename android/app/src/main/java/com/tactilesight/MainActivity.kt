@@ -7,13 +7,18 @@ import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.LinearLayout
+import android.widget.Spinner
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.viewpager2.widget.ViewPager2
+import com.tactilesight.core.BrowsableFrameSource
+import com.tactilesight.core.Frame
+import com.tactilesight.core.FrameSource
 import com.tactilesight.core.Orchestrator
 import com.tactilesight.databinding.ActivityMainBinding
 import com.tactilesight.frame.BundledCaptureSource
+import com.tactilesight.frame.DepthRenderer
 import com.tactilesight.frame.FramePage
 import com.tactilesight.frame.FramePagerAdapter
 import com.tactilesight.frame.FrameSourceKind
@@ -24,15 +29,19 @@ import kotlinx.coroutines.launch
  * The walking skeleton (#1): pick a bundled band capture, press, hear a
  * sentence.
  *
- * There is no phone camera anywhere in this app — frames are real Astra Pro
- * Plus captures. The band has three physical buttons (ADR-0011); until the band
- * is wired, this screen carries button 1 only. Buttons 2 and 3 arrive with #17,
+ * There is no phone camera in this app — frames are real Astra Pro Plus
+ * captures. The band has three physical buttons (ADR-0011); until the band is
+ * wired, this screen carries button 1 only. Buttons 2 and 3 arrive with #17,
  * the engine picker with #7.
+ *
+ * The screen depends on [FrameSource] and nothing narrower. Browsing is offered
+ * only when the source says it is browsable, so the live WebRTC source (#19)
+ * drops in without this file changing — which is the point of the seam.
  */
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
-    private lateinit var frames: BundledCaptureSource
+    private lateinit var frames: FrameSource
     private lateinit var orchestrator: Orchestrator
     private val pages = FramePagerAdapter()
 
@@ -53,11 +62,11 @@ class MainActivity : AppCompatActivity() {
         setUpSourcePicker()
         setUpScenePicker()
 
-        binding.describeButton.setOnClickListener { onPress() }
-
         if (BuildConfig.SARVAM_API_KEY.isBlank()) {
             binding.status.setText(R.string.status_no_key)
         }
+
+        binding.describeButton.setOnClickListener { onPress() }
     }
 
     private fun setUpSourcePicker() {
@@ -68,71 +77,48 @@ class MainActivity : AppCompatActivity() {
             kinds.map { if (it.available) it.displayName else "${it.displayName} — not yet" },
         )
 
-        binding.sourceSpinner.onItemSelectedListener =
-            object : AdapterView.OnItemSelectedListener {
-                override fun onItemSelected(p: AdapterView<*>?, v: View?, position: Int, id: Long) {
-                    val kind = kinds[position]
-                    if (!kind.available) {
-                        // Visible but not selectable: honest about what exists.
-                        Toast.makeText(
-                            this@MainActivity,
-                            getString(R.string.source_unavailable, kind.displayName),
-                            Toast.LENGTH_SHORT,
-                        ).show()
-                        binding.sourceSpinner.setSelection(kinds.indexOf(FrameSourceKind.BUNDLED))
-                    }
-                }
-
-                override fun onNothingSelected(p: AdapterView<*>?) = Unit
+        binding.sourceSpinner.onSelect { position ->
+            val kind = kinds[position]
+            if (!kind.available) {
+                Toast.makeText(
+                    this,
+                    getString(R.string.source_unavailable, kind.displayName),
+                    Toast.LENGTH_SHORT,
+                ).show()
+                binding.sourceSpinner.setSelection(kinds.indexOf(FrameSourceKind.BUNDLED))
             }
+        }
     }
 
+    /**
+     * A capture picker, but only for a source that has captures to pick from.
+     * A live source has no list, so the row disappears and the carousel waits
+     * for a press instead.
+     */
     private fun setUpScenePicker() {
-        val labels = frames.sceneIds.indices.map {
-            getString(R.string.capture_label, it + 1, frames.sceneIds.size)
+        val browsable = frames as? BrowsableFrameSource
+
+        if (browsable == null) {
+            binding.captureLabel.visibility = View.GONE
+            binding.sceneSpinner.visibility = View.GONE
+            binding.status.setText(R.string.status_press_to_capture)
+            return
+        }
+
+        val labels = browsable.sceneIds.indices.map {
+            getString(R.string.capture_label, it + 1, browsable.sceneIds.size)
         }
         binding.sceneSpinner.adapter =
             ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, labels)
 
-        binding.sceneSpinner.onItemSelectedListener =
-            object : AdapterView.OnItemSelectedListener {
-                override fun onItemSelected(p: AdapterView<*>?, v: View?, position: Int, id: Long) {
-                    frames.selectedIndex = position
-                    showPreview()
+        binding.sceneSpinner.onSelect { position ->
+            browsable.selectedIndex = position
+            lifecycleScope.launch {
+                try {
+                    showFrame(browsable.load(browsable.sceneIds[position]))
+                } catch (e: Exception) {
+                    Log.e(TAG, "preview failed", e)
                 }
-
-                override fun onNothingSelected(p: AdapterView<*>?) = Unit
-            }
-    }
-
-    /** Show the triplet, so it reads as band data rather than a stock photo. */
-    private fun showPreview() {
-        lifecycleScope.launch {
-            try {
-                val sceneId = frames.selectedSceneId
-                val frame = frames.load(sceneId)
-                pages.submit(
-                    listOf(
-                        FramePage(
-                            getString(R.string.stream_rgb),
-                            getString(R.string.preview_rgb),
-                            frame.rgbJpeg.toBitmap(),
-                        ),
-                        FramePage(
-                            getString(R.string.stream_ir),
-                            getString(R.string.preview_ir),
-                            frame.irJpeg.toBitmap(),
-                        ),
-                        FramePage(
-                            getString(R.string.stream_depth),
-                            getString(R.string.preview_depth),
-                            frames.depthPreview(sceneId).toBitmap(),
-                        ),
-                    ),
-                )
-                buildDots(count = 3, selected = binding.framePager.currentItem)
-            } catch (e: Exception) {
-                Log.e(TAG, "preview failed", e)
             }
         }
     }
@@ -148,6 +134,30 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    /** Show a frame's three streams. Works for any source — see [DepthRenderer]. */
+    private fun showFrame(frame: Frame) {
+        pages.submit(
+            listOf(
+                FramePage(
+                    getString(R.string.stream_rgb),
+                    getString(R.string.preview_rgb),
+                    frame.rgbJpeg.toBitmap(),
+                ),
+                FramePage(
+                    getString(R.string.stream_ir),
+                    getString(R.string.preview_ir),
+                    frame.irJpeg.toBitmap(),
+                ),
+                FramePage(
+                    getString(R.string.stream_depth),
+                    getString(R.string.preview_depth),
+                    DepthRenderer.render(frame.depthMillimetres),
+                ),
+            ),
+        )
+        buildDots(count = 3, selected = binding.framePager.currentItem)
+    }
+
     /** Three dots under the carousel; the current page is Qualcomm Blue. */
     private fun buildDots(count: Int, selected: Int) {
         val dots = binding.dots
@@ -158,7 +168,7 @@ class MainActivity : AppCompatActivity() {
                     View(this).apply {
                         setBackgroundResource(R.drawable.dot_indicator)
                         layoutParams = LinearLayout.LayoutParams(dotSize, dotSize).apply {
-                            marginStart = if (index == 0) 0 else dotGap
+                            marginStart = if (index == 0) 0 else dotSize
                         }
                     },
                 )
@@ -168,9 +178,6 @@ class MainActivity : AppCompatActivity() {
             dots.getChildAt(index).isSelected = index == selected
         }
     }
-
-    private val dotSize by lazy { (8 * resources.displayMetrics.density).toInt() }
-    private val dotGap by lazy { (8 * resources.displayMetrics.density).toInt() }
 
     private fun onPress() {
         binding.describeButton.isEnabled = false
@@ -191,7 +198,19 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** Spinner selection without the two-method anonymous-listener boilerplate. */
+    private fun Spinner.onSelect(action: (position: Int) -> Unit) {
+        onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(p: AdapterView<*>?, v: View?, position: Int, id: Long) =
+                action(position)
+
+            override fun onNothingSelected(p: AdapterView<*>?) = Unit
+        }
+    }
+
     private fun ByteArray.toBitmap() = BitmapFactory.decodeByteArray(this, 0, size)
+
+    private val dotSize by lazy { (8 * resources.displayMetrics.density).toInt() }
 
     private companion object {
         const val TAG = "MainActivity"

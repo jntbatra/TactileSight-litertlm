@@ -54,9 +54,11 @@
         android:layout_marginBottom="20dp" />
 
     <TextView
+        android:id="@+id/captureLabel"
         style="@style/TextAppearance.TactileSight.Label"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:labelFor="@id/sceneSpinner"
         android:text="@string/label_capture" />
 
     <Spinner
