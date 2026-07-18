@@ -39,3 +39,4 @@ models/
 .claude/settings.json
 .claude/settings.json.bak
 .claude/skills/
+server/.env
