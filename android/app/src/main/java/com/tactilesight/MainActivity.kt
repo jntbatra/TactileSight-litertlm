@@ -371,11 +371,24 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** Spinner selection without the two-method anonymous-listener boilerplate. */
+    /**
+     * Spinner selection without the two-method anonymous-listener boilerplate.
+     *
+     * Skips the **initial** callback. A Spinner fires one selection event as it
+     * lays out, before the user has touched anything, and treating that as a
+     * choice overwrites the persisted one with whatever sits at position 0 —
+     * so a saved language of हिन्दी silently became English on every launch.
+     */
     private fun Spinner.onSelect(action: (position: Int) -> Unit) {
+        var seenInitialCallback = false
         onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(p: AdapterView<*>?, v: View?, position: Int, id: Long) =
+            override fun onItemSelected(p: AdapterView<*>?, v: View?, position: Int, id: Long) {
+                if (!seenInitialCallback) {
+                    seenInitialCallback = true
+                    return
+                }
                 action(position)
+            }
 
             override fun onNothingSelected(p: AdapterView<*>?) = Unit
         }

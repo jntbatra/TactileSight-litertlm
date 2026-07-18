@@ -2,6 +2,7 @@ package com.tactilesight.speech
 
 import android.media.MediaPlayer
 import android.util.Base64
+import android.util.Log
 import com.tactilesight.BuildConfig
 import com.tactilesight.core.Language
 import com.tactilesight.core.SpeechIO
@@ -34,20 +35,50 @@ class SarvamSpeechIO(
         require(apiKey.isNotBlank()) {
             "Sarvam API key missing — set sarvam.api.key in android/local.properties"
         }
-        val wav = withContext(Dispatchers.IO) { synthesise(text, language) }
+        val wav = withContext(Dispatchers.IO) {
+            synthesise(translated(text, language), language)
+        }
         play(wav)
     }
 
-    /** Returns WAV bytes. Throws on any non-200 or malformed response. */
-    private fun synthesise(text: String, language: Language): ByteArray {
-        val body = JSONObject().apply {
-            put("text", text)
-            put("target_language_code", language.sarvamCode)
-            put("model", MODEL)
-            put("speaker", SPEAKER)
-        }.toString()
+    /**
+     * English in, the user's language out.
+     *
+     * This step is not optional and its absence is invisible: text-to-speech
+     * **synthesises, it does not translate**, so handing it an English sentence
+     * with `target_language_code: pa-IN` produces English words in a Punjabi
+     * voice. Everything looks correct — the language is passed, the call
+     * succeeds, audio plays — and the user simply does not understand it.
+     *
+     * The VLM answers in English on purpose: small VLMs are markedly weaker in
+     * Indic languages, so we translate a good English sentence rather than
+     * generate a poor Punjabi one (ADR-0012).
+     *
+     * A translation failure degrades to the English text rather than to
+     * silence — hard rule #4, every press yields speech.
+     */
+    private fun translated(text: String, language: Language): String {
+        if (language == Language.ENGLISH || text.isBlank()) return text
 
-        val connection = (URL(ENDPOINT).openConnection() as HttpURLConnection).apply {
+        return try {
+            val body = JSONObject().apply {
+                put("input", text)
+                put("source_language_code", SOURCE_LANGUAGE)
+                put("target_language_code", language.sarvamCode)
+            }.toString()
+
+            val json = post(TRANSLATE_ENDPOINT, body)
+            json.optString("translated_text").ifBlank { text }
+                .also { Log.i(TAG, "translated to ${language.sarvamCode}: $it") }
+        } catch (e: Exception) {
+            Log.w(TAG, "translation to ${language.sarvamCode} failed — speaking English", e)
+            text
+        }
+    }
+
+    /** One JSON POST to Sarvam, shared by translate and text-to-speech. */
+    private fun post(endpoint: String, body: String): JSONObject {
+        val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             doOutput = true
             connectTimeout = TIMEOUT_MS
@@ -55,21 +86,31 @@ class SarvamSpeechIO(
             setRequestProperty("Content-Type", "application/json")
             setRequestProperty(AUTH_HEADER, apiKey)
         }
-
         try {
             connection.outputStream.use { it.write(body.toByteArray()) }
-
             if (connection.responseCode != HttpURLConnection.HTTP_OK) {
                 val error = connection.errorStream?.bufferedReader()?.readText().orEmpty()
-                error("Sarvam TTS failed: HTTP ${connection.responseCode} $error")
+                error("Sarvam $endpoint failed: HTTP ${connection.responseCode} $error")
             }
-
-            val json = JSONObject(connection.inputStream.bufferedReader().readText())
-            val base64 = json.getJSONArray("audios").getString(0)
-            return Base64.decode(base64, Base64.DEFAULT)
+            return JSONObject(connection.inputStream.bufferedReader().readText())
         } finally {
             connection.disconnect()
         }
+    }
+
+    /** Returns WAV bytes. Throws on any non-200 or malformed response. */
+    private fun synthesise(text: String, language: Language): ByteArray {
+        Log.i(TAG, "speaking ${language.sarvamCode} via $MODEL/$SPEAKER")
+        val body = JSONObject().apply {
+            put("text", text)
+            put("target_language_code", language.sarvamCode)
+            put("model", MODEL)
+            put("speaker", SPEAKER)
+        }.toString()
+
+        val json = post(ENDPOINT, body)
+        val base64 = json.getJSONArray("audios").getString(0)
+        return Base64.decode(base64, Base64.DEFAULT)
     }
 
     /** Suspends until the utterance finishes — speech must not overlap. */
@@ -100,6 +141,11 @@ class SarvamSpeechIO(
         // v3 is the current model; v2 and v3-beta are also accepted. Speakers
         // are NOT shared between them — v2's "anushka" is rejected by v3 with
         // "not compatible with model bulbul:v3", so the pair moves together.
+        const val TAG = "SarvamSpeechIO"
+        const val TRANSLATE_ENDPOINT = "https://api.sarvam.ai/translate"
+
+        /** The VLM always answers in English (ADR-0012). */
+        const val SOURCE_LANGUAGE = "en-IN"
         const val MODEL = "bulbul:v3"
         const val SPEAKER = "ritu"
         const val TIMEOUT_MS = 15_000
