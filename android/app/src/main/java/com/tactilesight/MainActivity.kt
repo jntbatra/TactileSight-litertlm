@@ -109,7 +109,9 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.describeButton.setOnClickListener { onPress() }
-        setUpTagWriting()
+
+        // adb shell am start -n <pkg>/.MainActivity --ez writetag true
+        if (intent?.getBooleanExtra(EXTRA_WRITE_TAG, false) == true) armTagWriting()
 
         // Arriving by tap is worth announcing: the user cannot see that the
         // app opened, and silence after touching the band is indistinguishable
@@ -171,22 +173,23 @@ class MainActivity : AppCompatActivity() {
      * back as our own last sentence.
      */
     /**
-     * Writing a tag is a provisioning action, not a user control - a sighted
-     * teammate does it once per band. Foreground dispatch is only enabled while
-     * armed, because a blank tag matches no intent filter and would otherwise
-     * never reach us.
+     * Arm tag writing:
+     * `adb shell am start -n <pkg>/.MainActivity --ez writetag true`
+     *
+     * Provisioning, not a user control — a band is tagged once, by a sighted
+     * teammate, and a button for it sits on the demo screen forever afterwards
+     * inviting a mis-tap. The capability stays because writing a second band
+     * should not need a rebuild; only the button is gone.
      */
-    private fun setUpTagWriting() {
-        binding.writeTagButton.setOnClickListener {
-            if (BandTag.adapterFor(this) == null) {
-                binding.status.setText(R.string.tag_no_nfc)
-                return@setOnClickListener
-            }
-            armedForTagWrite = true
-            BandTag.startWriting(this)
-            Log.i(TAG, "armed for tag write")
-            binding.status.setText(R.string.tag_hold)
+    private fun armTagWriting() {
+        if (BandTag.adapterFor(this) == null) {
+            binding.status.setText(R.string.tag_no_nfc)
+            return
         }
+        armedForTagWrite = true
+        BandTag.startWriting(this)
+        Log.i(TAG, "armed for tag write")
+        binding.status.setText(R.string.tag_hold)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -790,6 +793,7 @@ class MainActivity : AppCompatActivity() {
         const val EXTRA_UNIT = "unit"
         const val EXTRA_COMPARE = "compare"
         const val EXTRA_PRESS = "press"
+        const val EXTRA_WRITE_TAG = "writetag"
         const val EXTRA_FROM = "from"
         const val REQUEST_MIC = 1001
         const val EXTRA_BUNDLES = "bundles"

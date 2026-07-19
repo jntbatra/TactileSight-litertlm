@@ -229,17 +229,6 @@
          to ask. Two on-screen buttons rather than one long-press, because a
          long-press on a touchscreen has no edge a finger can feel, and this
          screen is also how a sighted teammate demonstrates the band. -->
-    <!-- Provisioning, not a user control: a sighted teammate holds a blank
-         tag to the phone once when setting up a band. -->
-    <Button
-        android:id="@+id/writeTagButton"
-        style="@style/Widget.TactileSight.PrimaryButton"
-        android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:layout_marginTop="12dp"
-        android:text="@string/write_tag"
-        android:contentDescription="@string/write_tag_content_description" />
-
     <Button
         android:id="@+id/askButton"
         style="@style/Widget.TactileSight.PrimaryButton"
