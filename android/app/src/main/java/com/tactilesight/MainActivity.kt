@@ -571,19 +571,19 @@ class MainActivity : AppCompatActivity() {
      */
     private fun setUpBrainPicker() {
         val app = application as TactileSightApp
-        val modes = BrainMode.entries
 
-        binding.brainSpinner.adapter = ArrayAdapter(
-            this,
-            android.R.layout.simple_spinner_dropdown_item,
-            modes.map { it.displayName },
-        )
-        binding.brainSpinner.setSelection(modes.indexOf(app.settings.mode))
+        // Two destinations, so a switch rather than a dropdown - and the
+        // switch is labelled with where the frame *goes*, which is the part
+        // with consequences, rather than with the name of an engine.
+        binding.brainSwitch.isChecked = app.settings.mode.sendsImageryOffDevice
+        showDestination(app.settings.mode)
 
-        binding.brainSpinner.onSelect { position ->
-            val requested = modes[position]
+        binding.brainSwitch.setOnCheckedChangeListener { _, offDevice ->
+            val requested =
+                if (offDevice) BrainMode.PRIVATE_SERVER else BrainMode.ON_DEVICE_NPU
             app.applyMode(requested)
             showEndpointFor(app.settings.mode)
+            showDestination(app.settings.mode)
 
             if (requested.sendsImageryOffDevice && app.settings.urlFor(requested).isBlank()) {
                 toast(getString(R.string.endpoint_missing))
@@ -788,6 +788,21 @@ class MainActivity : AppCompatActivity() {
             TactileSightApp.ModelState.READY -> getString(R.string.status_brain, app.brain.name)
             TactileSightApp.ModelState.FAILED -> getString(R.string.model_failed)
         }
+    }
+
+    /**
+     * Say on the switch itself whether the frame leaves the phone.
+     *
+     * "On-device" and "Private server" are engine names; what a person needs
+     * to know is where their surroundings are being sent. The switch carries
+     * that sentence so the privacy question is answered by reading the control
+     * rather than by knowing what the words mean.
+     */
+    private fun showDestination(mode: BrainMode) {
+        binding.brainSwitch.setText(
+            if (mode.sendsImageryOffDevice) R.string.brain_private_server
+            else R.string.brain_on_device,
+        )
     }
 
     /**

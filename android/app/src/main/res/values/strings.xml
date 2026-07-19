@@ -14,6 +14,11 @@
     <string name="globe">🌐</string>
     <string name="language_content_description">Speaking %s. Tap to choose your language by voice.</string>
 
+    <!-- The switch says where the frame goes, not which engine runs. That is
+         the part with consequences. -->
+    <string name="brain_on_device">On-device · the frame stays on this phone</string>
+    <string name="brain_private_server">Private server · the frame leaves this phone</string>
+
     <string name="label_camera">Camera</string>
     <string name="camera_no_distance">Phone camera — I can describe what is around you, but not measure how far away it is.</string>
     <string name="camera_permission_needed">Camera permission is needed to use the phone camera.</string>

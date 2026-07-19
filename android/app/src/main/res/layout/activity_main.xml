@@ -125,15 +125,23 @@
         style="@style/TextAppearance.TactileSight.Label"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:labelFor="@id/brainSpinner"
+        android:labelFor="@id/brainSwitch"
         android:text="@string/label_brain" />
 
-    <Spinner
-        android:id="@+id/brainSpinner"
+    <!-- A switch, not a spinner: there are exactly two destinations, and a
+         dropdown makes you tap twice and read a list to answer a yes/no
+         question. Labelled with where the frame goes rather than with an
+         engine name, because that is the part that actually matters. -->
+    <androidx.appcompat.widget.SwitchCompat
+        android:id="@+id/brainSwitch"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
-        android:layout_marginBottom="12dp" />
+        android:layout_marginBottom="12dp"
+        android:minHeight="48dp"
+        android:text="@string/brain_on_device"
+        android:textColor="@color/on_surface"
+        android:textSize="15sp" />
 
     <!-- Only shown for a server mode: on-device has no address. -->
     <EditText
