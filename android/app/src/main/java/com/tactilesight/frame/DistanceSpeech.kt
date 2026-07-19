@@ -79,6 +79,10 @@ object DistanceSpeech {
         val spoken = measured
             .filter { it.isKnown }
             .filter { it.detection.label in NAMEABLE }
+            // A poster of a person is detected correctly, sits at a real
+            // distance and is the right apparent size. Only its flatness gives
+            // it away - see ObjectDistance.Measured.isSolid.
+            .filter { it.isSolid }
             .sortedBy { it.millimetres }
             .distinctBy { it.detection.label to sideOf(it.detection.centreX) }
             .take(MAX_SPOKEN)

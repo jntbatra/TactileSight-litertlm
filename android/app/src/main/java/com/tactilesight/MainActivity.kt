@@ -122,7 +122,10 @@ class MainActivity : AppCompatActivity() {
         // Sarvam - a distance bug would pass every check compare can make.
         // This speaks aloud on purpose: it is the end-to-end path, not a probe.
         if (intent?.getBooleanExtra(EXTRA_PRESS, false) == true) {
-            runPressSweep(intent?.getIntExtra(EXTRA_SCENES, 3) ?: 3)
+            runPressSweep(
+                scenes = intent?.getIntExtra(EXTRA_SCENES, 3) ?: 3,
+                from = intent?.getIntExtra(EXTRA_FROM, 0) ?: 0,
+            )
         }
 
         // adb shell am start -n <pkg>/.MainActivity --ez compare true
@@ -218,13 +221,15 @@ class MainActivity : AppCompatActivity() {
      * pixels and the claim that this is free next to the VLM should be a number
      * rather than an assumption.
      */
-    private fun runPressSweep(scenes: Int) {
+    private fun runPressSweep(scenes: Int, from: Int = 0) {
         val browsable = frames as? BrowsableFrameSource ?: return
         binding.status.text = getString(R.string.status_working)
 
         lifecycleScope.launch {
             delay(SETTLE_BEFORE_SWEEP_MS)
-            for ((index, id) in browsable.sceneIds.take(scenes).withIndex()) {
+            val chosen = browsable.sceneIds.drop(from).take(scenes)
+            for ((offset, id) in chosen.withIndex()) {
+                val index = from + offset
                 // Drive the real selection, so capture() returns this scene -
                 // onPress() must be reached exactly as a button press reaches it.
                 browsable.selectedIndex = index
@@ -712,6 +717,7 @@ class MainActivity : AppCompatActivity() {
         const val EXTRA_UNIT = "unit"
         const val EXTRA_COMPARE = "compare"
         const val EXTRA_PRESS = "press"
+        const val EXTRA_FROM = "from"
         const val REQUEST_MIC = 1001
         const val EXTRA_BUNDLES = "bundles"
         const val EXTRA_SCENES = "scenes"
