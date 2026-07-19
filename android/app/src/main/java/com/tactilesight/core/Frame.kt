@@ -26,6 +26,16 @@ data class Frame(
     /** Where this came from, for the dev UI and logs. */
     val sourceId: String = "",
 ) {
+    /**
+     * False for a source with no depth sensor — the phone's own camera.
+     *
+     * Everything measured hangs off this. A frame without depth is described
+     * but never measured, and the spoken sentence then carries **no** distance
+     * rather than an estimated one: ADR-0013's rule is that every number the
+     * user hears is a measurement, and a phone camera cannot produce one.
+     */
+    val hasDepth: Boolean get() = depthMillimetres.width > 0 && depthMillimetres.height > 0
+
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is Frame) return false
@@ -79,4 +89,16 @@ data class DepthMap(
 
     override fun hashCode(): Int =
         31 * (31 * width + height) + millimetres.contentHashCode()
+
+    companion object {
+        /**
+         * No depth sensor at all — not "a sensor that read nothing".
+         *
+         * The distinction matters: a band frame where every pixel came back
+         * invalid is a *measurement failure* worth logging and worth retrying,
+         * while this is a phone camera that was never going to measure
+         * anything. [Frame.hasDepth] is how the pipeline tells them apart.
+         */
+        val NONE = DepthMap(width = 0, height = 0, millimetres = ShortArray(0))
+    }
 }

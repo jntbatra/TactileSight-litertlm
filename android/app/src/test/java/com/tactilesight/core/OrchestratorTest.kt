@@ -30,6 +30,12 @@ class OrchestratorTest {
         depthMillimetres = DepthMap(8, 8, ShortArray(64) { 2000 }),
     )
 
+    /** The phone camera: no depth sensor at all, not a sensor that read zero. */
+    private val depthlessFrame = frame.copy(
+        depthMillimetres = DepthMap.NONE,
+        sourceId = "phone-camera",
+    )
+
     private class FakeFrameSource(
         private val frame: Frame? = null,
         private val failWith: Exception? = null,
@@ -73,7 +79,8 @@ class OrchestratorTest {
         val onDevice = FakeBrain("from the phone")
         var current: SemanticBrain = cloud
         val speech = FakeSpeech()
-        val orchestrator = Orchestrator(FakeFrameSource(frame), { current }, speech)
+        val source = FakeFrameSource(frame)
+        val orchestrator = Orchestrator({ source }, { current }, speech)
 
         assertEquals("from the cloud", orchestrator.onPress())
         current = onDevice
@@ -208,6 +215,29 @@ class OrchestratorTest {
         Orchestrator(FakeFrameSource(frame), FakeBrain("a doorway"), speech).onPress()
 
         assertEquals("a doorway", speech.spoken.single().first)
+    }
+
+    @Test
+    fun `a phone-camera frame is described but never measured`() = runTest {
+        // The standalone path. A phone has no depth sensor, so the answer
+        // carries no number - not an estimated one. Letting the model guess
+        // would put a wrong metre in front of someone who cannot see the thing
+        // they are about to walk into, which is the failure the whole depth
+        // pipeline exists to prevent (ADR-0013).
+        val speech = FakeSpeech()
+        Orchestrator(FakeFrameSource(depthlessFrame), FakeBrain("a doorway"), speech).onPress()
+
+        assertEquals("a doorway", speech.spoken.single().first)
+    }
+
+    @Test
+    fun `a source with no depth sensor is not the same as depth that read nothing`() {
+        // Both speak no distance, but only one is worth investigating: an
+        // all-invalid band frame is a measurement failure, while a phone
+        // camera was never going to measure anything.
+        assertTrue(measurableFrame.hasDepth)
+        assertTrue(frame.hasDepth)
+        assertTrue(!depthlessFrame.hasDepth)
     }
 
     @Test

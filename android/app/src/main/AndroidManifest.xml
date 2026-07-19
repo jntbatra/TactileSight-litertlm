@@ -15,6 +15,12 @@
          than at launch, so the prompt arrives when its purpose is obvious. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
+    <!-- The standalone path: TactileSight with no band attached. Declared
+         optional so a device without a usable camera can still install and run
+         against the band. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+
     <!-- Tap-to-launch, and writing the tag that does it. -->
     <uses-permission android:name="android.permission.NFC" />
     <uses-feature android:name="android.hardware.nfc" android:required="false" />

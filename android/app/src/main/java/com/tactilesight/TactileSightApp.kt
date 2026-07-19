@@ -35,6 +35,55 @@ class TactileSightApp : Application() {
 
     private val brainLock = Any()
 
+    /**
+     * What the model is actually doing, so the screen can stop guessing.
+     *
+     * The status line used to be written by the picker: choosing an engine
+     * printed `Ready · GenieX (qairt/npu)` while the model had not been mapped
+     * yet, and the first press then came back "Sorry, I could not see that."
+     * The picker knows which engine was *chosen*; only this knows whether it is
+     * actually *there*.
+     */
+    enum class ModelState { LOADING, READY, FAILED }
+
+    @Volatile
+    var modelState: ModelState = ModelState.LOADING
+        private set
+
+    /**
+     * Load the resident model and record how it went.
+     *
+     * Driven from the Activity rather than [onCreate] because it suspends and
+     * takes tens of seconds for a multi-gigabyte VLM — blocking process start
+     * on it hands Android a frozen app to kill before the first frame is drawn.
+     */
+    suspend fun prepareBrain(): ModelState {
+        // Loop rather than a single pass: switching engines mid-load is normal
+        // at a demo, and the first version simply *dropped* the result when the
+        // brain had changed underneath it. That left the state stale — a model
+        // that had loaded in 7 s while the screen still reported the outcome of
+        // the brain before it. Whoever is resident when a load finishes is the
+        // one the status has to describe, so prepare that one too.
+        while (true) {
+            val loading = brain
+            modelState = ModelState.LOADING
+            val ready = try {
+                loading.prepare()
+            } catch (e: Exception) {
+                Log.w(TAG, "preparing ${loading.name} failed", e)
+                false
+            }
+
+            if (loading !== brain) {
+                Log.i(TAG, "brain changed while ${loading.name} was loading — preparing the new one")
+                continue
+            }
+            modelState = if (ready) ModelState.READY else ModelState.FAILED
+            Log.i(TAG, "${loading.name} is $modelState")
+            return modelState
+        }
+    }
+
     /** The configuration the resident brain was built for — see [applyMode]. */
     @Volatile
     private var loadedConfiguration: String? = null
@@ -159,6 +208,10 @@ class TactileSightApp : Application() {
             if (next === brain) return
             val previous = brain
             brain = next
+            // The new brain has not been prepared yet, whatever the old one's
+            // state was. Leaving READY here is how the screen came to claim a
+            // model was loaded that had never been touched.
+            modelState = ModelState.LOADING
             previous.close()
         }
     }

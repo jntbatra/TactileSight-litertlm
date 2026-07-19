@@ -42,6 +42,7 @@ import android.nfc.Tag
 import com.tactilesight.frame.FrameSourceKind
 import com.tactilesight.nfc.BandTag
 import com.tactilesight.frame.ObjectDetector
+import com.tactilesight.frame.PhoneCameraSource
 import com.tactilesight.speech.MicRecorder
 import com.tactilesight.speech.SarvamAsr
 import com.tactilesight.speech.SarvamSpeechIO
@@ -66,7 +67,13 @@ import java.io.File
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
+
+    /** Whichever source the camera picker currently points at. */
     private lateinit var frames: FrameSource
+
+    /** The band's captures. Kept because the dev scene picker browses them. */
+    private lateinit var bundled: BundledCaptureSource
+    private val phoneCamera by lazy { PhoneCameraSource(this, this) }
     private lateinit var orchestrator: Orchestrator
     private val recorder = MicRecorder()
     private val detector by lazy { ObjectDetector(applicationContext) }
@@ -79,6 +86,12 @@ class MainActivity : AppCompatActivity() {
 
     /** True only between pressing "write tag" and a tag arriving. */
     private var armedForTagWrite = false
+
+    /** When the action button went down — tap or hold is decided at release. */
+    private var pressedAtMillis = 0L
+
+    /** True once a press has put an answer on screen, so warm-up cannot erase it. */
+    private var hasAnswered = false
     private val pages = FramePagerAdapter()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -86,9 +99,13 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        frames = BundledCaptureSource(assets)
+        bundled = BundledCaptureSource(assets)
+        frames = bundled
         orchestrator = Orchestrator(
-            frames = frames,
+            // Resolved per press, so switching between the band's captures and
+            // the phone camera takes effect immediately and without rebuilding
+            // the pipeline around it.
+            frames = { frames },
             // Owned by the Application, so rotation never drops the model.
             brain = { (application as TactileSightApp).brain },
             speech = SarvamSpeechIO(cacheDir),
@@ -102,17 +119,21 @@ class MainActivity : AppCompatActivity() {
         )
 
         setUpCarousel()
-        setUpSourcePicker()
+        setUpCameraPicker()
         setUpBrainPicker()
         setUpLanguagePicker()
         setUpScenePicker()
+        setUpModeSwitch()
 
         if (BuildConfig.SARVAM_API_KEY.isBlank()) {
             binding.status.setText(R.string.status_no_key)
         }
 
-        binding.describeButton.setOnClickListener { onPress() }
-        binding.setupButton.setOnClickListener { runSpokenSetup() }
+        // Load the model now, not on the first press. Until this lands, the
+        // screen used to claim "Ready" while nothing was mapped, and the first
+        // press came back "Sorry, I could not see that" - the user had done
+        // nothing wrong and the screen had told them nothing true.
+        warmUpModel()
 
         // First launch asks by ear, so a blind user is never required to find
         // a spinner to be understood. Once only - see Settings.isConfigured.
@@ -133,7 +154,7 @@ class MainActivity : AppCompatActivity() {
             Log.i(TAG, "launched by NFC tap")
             lifecycleScope.launch { orchestrator.speakReady() }
         }
-        setUpAskButton()
+        setUpActionButton()
 
         // Dev affordance, not a feature: adb shell am start -n <pkg>/.MainActivity --ez sweep true
         if (intent?.getBooleanExtra(EXTRA_SWEEP, false) == true) runPromptSweep()
@@ -288,16 +309,34 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun setUpAskButton() {
-        binding.askButton.setOnTouchListener { view, event ->
+    /**
+     * One button, both gestures — the band's button 1 on glass.
+     *
+     * **Tap** (under [HOLD_THRESHOLD_MS]) describes. **Hold** captures at
+     * press-down, records while held, and asks at release.
+     *
+     * The mic opens on *every* press-down and the buffer is thrown away on a
+     * tap. Waiting until the threshold to start recording would be tidier and
+     * would eat the first word of every question — a user who says "what's on
+     * the table?" would be transcribed as "on the table?". A third of a second
+     * of discarded audio is the cheaper mistake.
+     *
+     * The frame is taken at press-down in both cases: by the time a question
+     * ends the user may have turned their head, or the person they were asking
+     * about may have walked on.
+     */
+    private fun setUpActionButton() {
+        binding.actionButton.setOnTouchListener { view, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
                     view.performClick()
+                    pressedAtMillis = System.currentTimeMillis()
                     startAsking()
                     true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    finishAsking()
+                    val heldFor = System.currentTimeMillis() - pressedAtMillis
+                    if (heldFor < HOLD_THRESHOLD_MS) tapToDescribe() else finishAsking()
                     true
                 }
                 else -> false
@@ -305,16 +344,41 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun startAsking() {
-        if (!hasMicPermission()) {
-            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQUEST_MIC)
-            binding.status.setText(R.string.status_no_mic)
-            return
+    /**
+     * A tap: drop the audio, keep the frame, describe it.
+     *
+     * The recording is discarded without being sent — a third of a second of
+     * room noise is not a question, and asking Sarvam to transcribe it would
+     * add a network round trip to the gesture that is meant to be the fast one.
+     */
+    private fun tapToDescribe() {
+        recorder.stop()
+        binding.status.setText(R.string.status_working)
+        lifecycleScope.launch {
+            try {
+                // The frame captured at press-down, or a fresh one if that is
+                // still in flight - a tap can outrun the capture.
+                binding.status.text = heldFrame
+                    ?.let { orchestrator.answerAbout(it) }
+                    ?: orchestrator.onPress()
+                hasAnswered = true
+            } catch (e: Exception) {
+                Log.e(TAG, "describe failed", e)
+                binding.status.setText(R.string.status_speech_failed)
+            }
+            heldFrame = null
         }
+    }
+
+    private fun startAsking() {
         // Capture first: the mic can wait a few milliseconds, the scene cannot.
         heldFrame = null
         lifecycleScope.launch { heldFrame = orchestrator.captureNow() }
 
+        if (!hasMicPermission()) {
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQUEST_MIC)
+            return
+        }
         if (recorder.start()) {
             binding.status.setText(R.string.status_listening)
         } else {
@@ -323,7 +387,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun finishAsking() {
-        if (!recorder.isRecording) return
+        if (!recorder.isRecording) {
+            // No mic, but the press still has to answer: fall back to a
+            // description rather than a dead hold (hard rule #4).
+            tapToDescribe()
+            return
+        }
         val wav = recorder.stop()
         binding.status.setText(R.string.status_working)
 
@@ -335,11 +404,36 @@ class MainActivity : AppCompatActivity() {
             Log.i(TAG, "asked: ${question ?: "(nothing heard — describing instead)"}")
             try {
                 binding.status.text = orchestrator.answerAbout(heldFrame, question)
+                hasAnswered = true
             } catch (e: Exception) {
                 Log.e(TAG, "ask failed", e)
                 binding.status.setText(R.string.status_speech_failed)
             }
             heldFrame = null
+        }
+    }
+
+    /**
+     * Map the model at startup and report what actually happened.
+     *
+     * A press during the load is not blocked: the engines load once under their
+     * own lock, so a press simply waits for the same load this started rather
+     * than kicking off a second one.
+     */
+    private fun warmUpModel() {
+        val app = application as TactileSightApp
+        binding.status.setText(R.string.model_loading)
+        lifecycleScope.launch {
+            val state = app.prepareBrain()
+            // Never overwrite an answer. A press can complete while the model
+            // is still warming - the brain loads under its own lock, so the
+            // press simply waits for this same load - and replacing what the
+            // user just heard with "Ready" would erase the thing they pressed
+            // the button for.
+            if (!hasAnswered) showBrain()
+            if (state == TactileSightApp.ModelState.FAILED) {
+                Log.e(TAG, "model failed to load — presses will speak the fallback")
+            }
         }
     }
 
@@ -444,27 +538,6 @@ class MainActivity : AppCompatActivity() {
         -1
     }
 
-    private fun setUpSourcePicker() {
-        val kinds = FrameSourceKind.entries
-        binding.sourceSpinner.adapter = ArrayAdapter(
-            this,
-            android.R.layout.simple_spinner_dropdown_item,
-            kinds.map { if (it.available) it.displayName else "${it.displayName} — not yet" },
-        )
-
-        binding.sourceSpinner.onSelect { position ->
-            val kind = kinds[position]
-            if (!kind.available) {
-                Toast.makeText(
-                    this,
-                    getString(R.string.source_unavailable, kind.displayName),
-                    Toast.LENGTH_SHORT,
-                ).show()
-                binding.sourceSpinner.setSelection(kinds.indexOf(FrameSourceKind.BUNDLED))
-            }
-        }
-    }
-
     /**
      * Where the frame gets described: on the phone, or on our own server. The
      * endpoint field appears only for the one that needs an address.
@@ -541,25 +614,74 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Every language Sarvam speaks. Switching takes effect on the next press
-     * with no model reload — the VLM always answers in English and the language
-     * is applied at speech time (ADR-0012), which is what makes 23 languages
-     * cost the same as one.
+     * Every language Sarvam speaks, behind the smallest control on the screen.
+     *
+     * A two-letter button rather than a labelled spinner because language is
+     * chosen once — by voice, at setup — and after that it is a correction, not
+     * a setting anyone visits. It sits in the header rather than in the dev
+     * panel for the same reason: user mode hides that panel, and the user's own
+     * language must not become unreachable when it does.
+     *
+     * Switching takes effect on the next press with no model reload — the VLM
+     * always answers in English and the language is applied at speech time
+     * (ADR-0012), which is what makes 23 languages cost the same as one.
      */
     private fun setUpLanguagePicker() {
+        showLanguage((application as TactileSightApp).settings.language)
+        binding.languageButton.setOnClickListener { runSpokenSetup() }
+    }
+
+    /**
+     * The globe never changes; only what it announces does.
+     *
+     * A symbol rather than the language's name because the name would have to
+     * be written in *some* language, and this control exists precisely for
+     * someone who cannot read the one currently set. The current language lives
+     * on the content description, where a screen reader will say it aloud in
+     * full — which is the only form of it that reaches the intended user.
+     */
+    private fun showLanguage(language: Language) {
+        binding.languageButton.contentDescription =
+            getString(R.string.language_content_description, language.displayName)
+    }
+
+    /**
+     * Dev mode shows the machinery; user mode shows the app.
+     *
+     * What survives the switch is deliberate rather than minimal. Language and
+     * the engine picker stay: the first is the user's own setting, and the
+     * second decides whether a frame leaves the phone and is the one control
+     * worth reaching for when the venue network dies mid-demo. Everything else
+     * — frame source, server address, model name, prompt, capture picker — is
+     * scaffolding for building this, and a blind user has no use for any of it.
+     *
+     * The switch itself is always visible. A mode you cannot leave without
+     * clearing app data is a trap, not a mode.
+     */
+    private fun setUpModeSwitch() {
         val app = application as TactileSightApp
-        val languages = Language.speakable
-
-        binding.languageSpinner.adapter = ArrayAdapter(
-            this,
-            android.R.layout.simple_spinner_dropdown_item,
-            languages.map { it.displayName },
-        )
-        binding.languageSpinner.setSelection(languages.indexOf(app.settings.language))
-
-        binding.languageSpinner.onSelect { position ->
-            app.settings.language = languages[position]
+        binding.modeSwitch.isChecked = app.settings.devMode
+        showMode()
+        binding.modeSwitch.setOnCheckedChangeListener { _, checked ->
+            app.settings.devMode = checked
+            showMode()
         }
+    }
+
+    private fun showMode() {
+        val dev = (application as TactileSightApp).settings.devMode
+        binding.devPanel.visibility = if (dev) View.VISIBLE else View.GONE
+        // The preview goes with it. It shows a bundled capture the user cannot
+        // change once the picker is hidden, and it is there to check what the
+        // model was given - which is a developer's question. When the band's
+        // own stream lands it is still not a user's control: someone who cannot
+        // see the screen is not served by a picture on it.
+        binding.previewCard.visibility = if (dev) View.VISIBLE else View.GONE
+        binding.modeSwitch.contentDescription = getString(
+            if (dev) R.string.mode_on_content_description
+            else R.string.mode_off_content_description,
+        )
+        binding.subtitle.setText(if (dev) R.string.subtitle else R.string.subtitle_user)
     }
 
     /**
@@ -622,11 +744,96 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** Name the resident brain, so which engine answered is never a guess. */
+    /**
+     * Name the resident brain **and** say whether its model is actually there.
+     *
+     * The old version printed `Ready · GenieX (qairt/npu)` from the picker
+     * alone, which described a choice rather than a state — so a press during
+     * the load came back "Sorry, I could not see that" under a screen that said
+     * Ready. The engine name is the same either way; what changed is that the
+     * word "Ready" now has to be earned.
+     */
     private fun showBrain() {
         val app = application as TactileSightApp
-        binding.status.text = getString(R.string.status_brain, app.brain.name)
+        binding.status.text = when (app.modelState) {
+            TactileSightApp.ModelState.LOADING -> getString(R.string.model_loading)
+            TactileSightApp.ModelState.READY -> getString(R.string.status_brain, app.brain.name)
+            TactileSightApp.ModelState.FAILED -> getString(R.string.model_failed)
+        }
     }
+
+    /**
+     * Band or phone — the one control that changes what the app can tell you.
+     *
+     * Visible in user mode, unlike the rest of the plumbing, because the two
+     * are not interchangeable: the band measures distance and the phone camera
+     * cannot. Switching to the phone therefore says so out loud once. Silently
+     * dropping every distance would read as the feature having broken.
+     */
+    private fun setUpCameraPicker() {
+        val kinds = FrameSourceKind.entries
+        binding.cameraSpinner.adapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_dropdown_item,
+            kinds.map { if (it.available) it.displayName else "${it.displayName} — not yet" },
+        )
+
+        binding.cameraSpinner.onSelect { position ->
+            val kind = kinds[position]
+            if (!kind.available) {
+                toast(getString(R.string.source_unavailable, kind.displayName))
+                binding.cameraSpinner.setSelection(kinds.indexOf(FrameSourceKind.BUNDLED))
+                return@onSelect
+            }
+            selectSource(kind)
+        }
+    }
+
+    private fun selectSource(kind: FrameSourceKind) {
+        when (kind) {
+            FrameSourceKind.PHONE_CAMERA -> {
+                if (!hasCameraPermission()) {
+                    requestPermissions(arrayOf(Manifest.permission.CAMERA), REQUEST_CAMERA)
+                    binding.cameraSpinner.setSelection(FrameSourceKind.BUNDLED.ordinal)
+                    binding.status.setText(R.string.camera_permission_needed)
+                    return
+                }
+                frames = phoneCamera
+                // Bind now rather than inside the first press: binding takes a
+                // beat, and that beat would otherwise land between the button
+                // and the answer.
+                lifecycleScope.launch {
+                    try {
+                        phoneCamera.start()
+                    } catch (e: Exception) {
+                        Log.e(TAG, "camera would not start", e)
+                    }
+                }
+                // Said aloud, not just shown: the user this is for cannot read
+                // the difference between the two modes off the screen.
+                lifecycleScope.launch {
+                    val notice = getString(R.string.camera_no_distance)
+                    binding.status.text = notice
+                    try {
+                        speech.speak(notice, (application as TactileSightApp).settings.language)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "could not speak the phone-camera notice", e)
+                    }
+                }
+            }
+
+            else -> {
+                frames = bundled
+                phoneCamera.stop()
+                showBrain()
+            }
+        }
+        setUpScenePicker()
+        Log.i(TAG, "frame source = $kind")
+    }
+
+    private fun hasCameraPermission(): Boolean =
+        checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
 
     /** Score two prompt wordings over the bundled captures — see PromptBenchmark. */
     private fun runPromptSweep() {
@@ -799,33 +1006,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun onPress() {
-        binding.describeButton.isEnabled = false
-        binding.status.setText(R.string.status_working)
-
-        lifecycleScope.launch {
-            try {
-                binding.status.text = orchestrator.onPress()
-            } catch (e: Exception) {
-                // Speech itself failed. With no offline TTS fallback in the MVP
-                // (ADR-0012) there is nothing left to say aloud, so say it on
-                // screen rather than fail silently.
-                Log.e(TAG, "speech failed", e)
-                binding.status.setText(R.string.status_speech_failed)
-            } finally {
-                binding.describeButton.isEnabled = true
-            }
-        }
-    }
-
-    /**
-     * Spinner selection without the two-method anonymous-listener boilerplate.
-     *
-     * Skips the **initial** callback. A Spinner fires one selection event as it
-     * lays out, before the user has touched anything, and treating that as a
-     * choice overwrites the persisted one with whatever sits at position 0 —
-     * so a saved language of हिन्दी silently became English on every launch.
-     */
     /**
      * [skipInitial] governs whether the callback Android fires when the adapter
      * is first attached is treated as a user choice.
@@ -869,6 +1049,16 @@ class MainActivity : AppCompatActivity() {
         const val EXTRA_WRITE_TAG = "writetag"
         const val EXTRA_FROM = "from"
         const val REQUEST_MIC = 1001
+        const val REQUEST_CAMERA = 1002
+
+        /**
+         * Above this, a press is a question rather than a request to describe.
+         *
+         * 400 ms is comfortably longer than a deliberate tap and shorter than
+         * anyone can begin a sentence in, so neither gesture can be mistaken
+         * for the other by someone who is not watching the screen.
+         */
+        const val HOLD_THRESHOLD_MS = 400L
 
         /** Long enough to say a language, short enough not to feel stuck. */
         const val SETUP_LISTEN_MS = 4_000L

@@ -3,6 +3,27 @@
     <string name="app_name">TactileSight</string>
     <string name="subtitle">Walking skeleton · bundled band captures</string>
 
+    <string name="mode_dev_label">Dev</string>
+    <string name="mode_on_content_description">Developer controls shown. Switch off for user mode.</string>
+    <string name="mode_off_content_description">User mode. Switch on to show the developer controls.</string>
+    <string name="subtitle_user">Tap to describe · hold to ask</string>
+
+    <!-- A symbol, not a name: the name would have to be written in some
+         language, and this control exists for a user who cannot read the one
+         that is currently set. -->
+    <string name="globe">🌐</string>
+    <string name="language_content_description">Speaking %s. Tap to choose your language by voice.</string>
+
+    <string name="label_camera">Camera</string>
+    <string name="camera_no_distance">Phone camera — I can describe what is around you, but not measure how far away it is.</string>
+    <string name="camera_permission_needed">Camera permission is needed to use the phone camera.</string>
+
+    <string name="action">Describe</string>
+    <string name="action_content_description">Tap to describe what is in front of you. Hold to ask a question.</string>
+
+    <string name="model_loading">Loading the model…</string>
+    <string name="model_failed">The model did not load. Presses will not work — see logcat.</string>
+
     <string name="label_source">Frame source</string>
     <string name="label_brain">Describe using</string>
     <string name="label_capture">Capture</string>

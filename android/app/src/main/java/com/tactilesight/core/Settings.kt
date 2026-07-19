@@ -74,6 +74,21 @@ class Settings(context: Context) {
         get() = prefs.getBoolean(KEY_CONFIGURED, false)
         set(value) = prefs.edit().putBoolean(KEY_CONFIGURED, value).apply()
 
+    /**
+     * Whether the developer controls are on screen.
+     *
+     * Defaults to **on**: this screen exists to develop and demonstrate the
+     * band, and a build that hid its own engine picker by default would cost
+     * more time at the venue than it saved.
+     *
+     * Persisted so a demo does not have to be re-tidied after every launch —
+     * ColorOS kills this app aggressively, and re-hiding the panel in front of
+     * an audience is the fumble the switch exists to prevent.
+     */
+    var devMode: Boolean
+        get() = prefs.getBoolean(KEY_DEV_MODE, true)
+        set(value) = prefs.edit().putBoolean(KEY_DEV_MODE, value).apply()
+
     fun urlFor(mode: BrainMode): String = when (mode) {
         BrainMode.PRIVATE_SERVER -> privateServerUrl
         BrainMode.ON_DEVICE_NPU -> ""
@@ -95,6 +110,7 @@ class Settings(context: Context) {
         const val KEY_CONFIGURED = "configured"
         const val KEY_PRIVATE_OPENAI = "private_server_is_openai"
         const val KEY_PRIVATE_MODEL = "private_server_model"
+        const val KEY_DEV_MODE = "dev_mode"
 
         /** The laptop tier's default port, per server/README. */
         const val DEFAULT_PRIVATE_URL = "http://192.168.1.100:8000"

@@ -24,6 +24,24 @@ interface SemanticBrain {
     val name: String
 
     /**
+     * Get the model into memory, and say whether it made it.
+     *
+     * Exists because "ready" was a lie. The screen reported
+     * `Ready · GenieX (qairt/npu)` the moment the picker resolved, while the
+     * model had not been mapped yet — so the first press after launch came back
+     * *"Sorry, I could not see that."* The user had done nothing wrong and the
+     * screen had told them nothing true.
+     *
+     * Called at startup, so the wait happens while the phone is still going
+     * into a pocket rather than after a press. Idempotent: engines load once
+     * under their own lock, so preparing and then pressing does not load twice.
+     *
+     * Default `true` — a server brain and the stub have nothing to load and are
+     * ready the moment they exist.
+     */
+    suspend fun prepare(): Boolean = true
+
+    /**
      * Describe [frame], optionally answering [question]. Answers in English;
      * translation to the user's language happens in [SpeechIO] (ADR-0012).
      */

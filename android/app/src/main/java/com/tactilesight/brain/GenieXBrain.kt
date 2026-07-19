@@ -100,6 +100,24 @@ class GenieXBrain(
         val computeUnit: String,
     )
 
+    /**
+     * Map the model now, so the first press does not pay for it.
+     *
+     * Reports the outcome rather than throwing: a model that will not load is a
+     * state the screen has to be able to show, not an error that kills startup.
+     * The app still runs and still speaks — it just says so.
+     */
+    override suspend fun prepare(): Boolean = try {
+        load()
+        true
+    } catch (e: Exception) {
+        Log.e(TAG, "model failed to load", e)
+        false
+    }
+
+    /** True once the model is mapped and a press will not have to wait. */
+    val isLoaded: Boolean get() = vlm != null
+
     override suspend fun describe(frame: Frame, question: String?, surfaceIsFlat: Boolean): Answer {
         val base = promptOverride()?.takeIf { it.isNotBlank() } ?: VlmPrompt.forRequest(question)
         return describeWith(frame, if (surfaceIsFlat) VlmPrompt.withFlatSurface(base) else base)

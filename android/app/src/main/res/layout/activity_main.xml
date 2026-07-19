@@ -23,37 +23,90 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
-    <TextView
-        android:layout_width="wrap_content"
+    <!-- Title on the left, the mode switch pinned top right. -->
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/app_name"
-        android:textColor="@color/on_surface"
-        android:textSize="28sp"
-        android:letterSpacing="-0.02" />
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="2dp"
         android:layout_marginBottom="28dp"
-        android:text="@string/subtitle"
-        android:textColor="@color/on_surface_muted"
-        android:textSize="14sp" />
+        android:orientation="horizontal">
 
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/app_name"
+                android:textColor="@color/on_surface"
+                android:textSize="28sp"
+                android:letterSpacing="-0.02" />
+
+            <TextView
+                android:id="@+id/subtitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="@string/subtitle"
+                android:textColor="@color/on_surface_muted"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <!-- The globe runs the spoken setup. A symbol rather than a language
+             name because the name would have to be written in *some* language,
+             and the whole point of this control is reaching a user who does not
+             read the one currently set. -->
+        <TextView
+            android:id="@+id/languageButton"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_gravity="top"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:text="@string/globe"
+            android:textSize="26sp" />
+
+        <!-- Always visible, in both modes: a mode you cannot leave without
+             clearing app data is a trap, not a mode. -->
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/modeSwitch"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:layout_gravity="top"
+            android:layout_marginStart="8dp"
+            android:gravity="center_vertical"
+            android:text="@string/mode_dev_label"
+            android:textColor="@color/on_surface_muted"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <!-- Band or phone. Top of the screen and visible in user mode because it
+         changes what the app can tell you: the band measures distance, the
+         phone only describes. See FrameSourceKind.measuresDistance. -->
     <TextView
+        android:id="@+id/cameraLabel"
         style="@style/TextAppearance.TactileSight.Label"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/label_source" />
+        android:labelFor="@id/cameraSpinner"
+        android:text="@string/label_camera" />
 
     <Spinner
-        android:id="@+id/sourceSpinner"
+        android:id="@+id/cameraSpinner"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
-        android:layout_marginBottom="20dp" />
+        android:layout_marginBottom="12dp" />
 
+    <!-- Which engine answers stays visible in user mode. It is not a debug
+         detail: it decides whether the frame leaves the phone, and it is the
+         one thing a user may have to change when the venue network dies. -->
     <TextView
+        android:id="@+id/brainLabel"
         style="@style/TextAppearance.TactileSight.Label"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -64,7 +117,18 @@
         android:id="@+id/brainSpinner"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp" />
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="12dp" />
+
+    <!-- Everything a user must never have to see or understand: where the
+         frames come from, where the engine lives, and what it is asked. One
+         container so the switch is a single visibility change and a control
+         cannot be added here and forgotten. -->
+    <LinearLayout
+        android:id="@+id/devPanel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
 
     <!-- Only shown for a server mode: on-device has no address. -->
     <EditText
@@ -107,20 +171,6 @@
         android:textColor="@color/on_surface"
         android:textColorHint="@color/on_surface_muted"
         android:textSize="14sp" />
-
-    <TextView
-        style="@style/TextAppearance.TactileSight.Label"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:labelFor="@id/languageSpinner"
-        android:text="@string/label_language" />
-
-    <Spinner
-        android:id="@+id/languageSpinner"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp" />
 
     <TextView
         style="@style/TextAppearance.TactileSight.Label"
@@ -175,10 +225,13 @@
         android:layout_marginTop="4dp"
         android:layout_marginBottom="20dp" />
 
+    </LinearLayout>
+
     <!-- The pair as a carousel: colour and depth. Wraps to the image
          rather than stretching to fill, so the card stays the size of what it
          shows. -->
     <LinearLayout
+        android:id="@+id/previewCard"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
@@ -215,38 +268,22 @@
     </LinearLayout>
     </ScrollView>
 
-    <!-- Band button 1. Full-width and tall: findable by touch alone. -->
+    <!-- Band button 1, on glass. One target carrying both gestures, exactly as
+         the hardware does: tap to describe, hold to ask. Two separate buttons
+         were the earlier answer, on the grounds that a long-press has no edge a
+         finger can feel - but the band has one button, and a screen that
+         teaches a different gesture from the hardware teaches the wrong one.
+
+         Deliberately enormous: findable by touch alone, with no need to locate
+         an edge before pressing. -->
     <Button
-        android:id="@+id/describeButton"
+        android:id="@+id/actionButton"
         style="@style/Widget.TactileSight.PrimaryButton"
         android:layout_width="match_parent"
-        android:layout_height="72dp"
+        android:layout_height="140dp"
         android:layout_marginTop="16dp"
-        android:text="@string/describe"
-        android:contentDescription="@string/describe_content_description" />
-
-    <!-- The same gesture the band's button 1 carries: press to describe, hold
-         to ask. Two on-screen buttons rather than one long-press, because a
-         long-press on a touchscreen has no edge a finger can feel, and this
-         screen is also how a sighted teammate demonstrates the band. -->
-    <!-- Setup runs itself on first launch; this is for changing your mind,
-         and for a demo that needs to show it twice. -->
-    <Button
-        android:id="@+id/setupButton"
-        style="@style/Widget.TactileSight.PrimaryButton"
-        android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:layout_marginTop="12dp"
-        android:text="@string/setup"
-        android:contentDescription="@string/setup_content_description" />
-
-    <Button
-        android:id="@+id/askButton"
-        style="@style/Widget.TactileSight.PrimaryButton"
-        android:layout_width="match_parent"
-        android:layout_height="72dp"
-        android:layout_marginTop="12dp"
-        android:text="@string/ask"
-        android:contentDescription="@string/ask_content_description" />
+        android:text="@string/action"
+        android:textSize="22sp"
+        android:contentDescription="@string/action_content_description" />
 
 </LinearLayout>

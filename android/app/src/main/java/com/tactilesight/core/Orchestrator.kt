@@ -18,7 +18,13 @@ import com.tactilesight.frame.RegionDistance
  * hardware and no model.
  */
 class Orchestrator(
-    private val frames: FrameSource,
+    /**
+     * Resolved per press, like the brain. The user switches between the band
+     * and the phone camera from the top of the screen, and a reference taken
+     * once at construction would keep capturing from whichever was selected
+     * when the Activity was created.
+     */
+    private val frames: () -> FrameSource,
     /**
      * Resolved per press, not captured once. The resident brain changes when
      * the user switches destination (on-device / private server / cloud), and
@@ -46,7 +52,7 @@ class Orchestrator(
         language: Language = Language.ENGLISH,
         // Named, not positional: adding a parameter above must not silently
         // rebind this one. It did exactly that when `detect` was introduced.
-    ) : this(frames = frames, brain = { brain }, speech = speech, language = { language })
+    ) : this(frames = { frames }, brain = { brain }, speech = speech, language = { language })
 
     /**
      * Handle one press. Returns what was spoken, so callers (and tests) can see
@@ -58,7 +64,7 @@ class Orchestrator(
      */
     suspend fun onPress(question: String? = null): String {
         val frame = try {
-            frames.capture()
+            frames().capture()
         } catch (e: Exception) {
             Log.w(TAG, "capture failed", e)
             speech.speak(FALLBACK, language())
@@ -96,7 +102,7 @@ class Orchestrator(
      * frame must be the one that was in front of them when they decided to ask.
      */
     suspend fun captureNow(): Frame? = try {
-        frames.capture()
+        frames().capture()
     } catch (e: Exception) {
         Log.w(TAG, "capture failed", e)
         null
@@ -168,6 +174,10 @@ class Orchestrator(
     /** Detections with their measured distance and flatness, or empty. */
     private fun measure(frame: Frame): List<ObjectDistance.Measured> {
         val detector = detect ?: return emptyList()
+        // A phone camera has nothing to measure against. Returning empty here
+        // rather than further down keeps every distance path fed from one
+        // decision: no depth, no measurements, therefore no numbers spoken.
+        if (!frame.hasDepth) return emptyList()
         return try {
             ObjectDistance.measure(detector(frame.rgbJpeg), frame.depthMillimetres)
         } catch (e: Exception) {
@@ -196,6 +206,9 @@ class Orchestrator(
     ): String {
         val described = named.description
         if (described == FALLBACK) return described
+        // No depth sensor: the description stands alone, with no number in it.
+        // This is the whole phone-camera contract - see Frame.hasDepth.
+        if (!frame.hasDepth) return described
         return try {
             val clause = distanceClauseFor(frame, measured, named)
             if (clause.isBlank()) described else "$clause $described"

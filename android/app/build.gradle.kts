@@ -101,6 +101,11 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("androidx.viewpager2:viewpager2:1.1.0")
 
+    // CameraX for the phone-camera source — the standalone path, no band.
+    // On-demand ImageCapture only: nothing streams between presses.
+    implementation("androidx.camera:camera-camera2:1.3.4")
+    implementation("androidx.camera:camera-lifecycle:1.3.4")
+
     // GenieX — Qualcomm's on-device LLM/VLM runtime. Carries both backends as
     // native libs: libgeniex_plugin_qairt.so (Hexagon NPU, via libQnnHtpV81.so
     // for 8 Elite Gen 5) and libgeniex_plugin_llama_cpp.so (GPU/CPU fallback).
