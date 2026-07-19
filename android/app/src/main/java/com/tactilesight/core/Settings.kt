@@ -62,6 +62,18 @@ class Settings(context: Context) {
         get() = Language.fromCode(prefs.getString(KEY_LANGUAGE, null))
         set(value) = prefs.edit().putString(KEY_LANGUAGE, value.sarvamCode).apply()
 
+    /**
+     * Whether the spoken setup has completed at least once.
+     *
+     * Separate from [language] having a value, because language always has one
+     * — English is the default. Without this flag, "has the user chosen?" and
+     * "is it English?" are the same question, and a user who genuinely chose
+     * English would be asked again on every launch.
+     */
+    var isConfigured: Boolean
+        get() = prefs.getBoolean(KEY_CONFIGURED, false)
+        set(value) = prefs.edit().putBoolean(KEY_CONFIGURED, value).apply()
+
     fun urlFor(mode: BrainMode): String = when (mode) {
         BrainMode.PRIVATE_SERVER -> privateServerUrl
         BrainMode.ON_DEVICE_NPU -> ""
@@ -80,6 +92,7 @@ class Settings(context: Context) {
         const val KEY_PRIVATE_URL = "private_server_url"
         const val KEY_PROMPT = "custom_prompt"
         const val KEY_LANGUAGE = "language"
+        const val KEY_CONFIGURED = "configured"
         const val KEY_PRIVATE_OPENAI = "private_server_is_openai"
         const val KEY_PRIVATE_MODEL = "private_server_model"
 

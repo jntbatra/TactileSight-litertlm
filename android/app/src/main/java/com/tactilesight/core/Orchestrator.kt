@@ -143,9 +143,18 @@ class Orchestrator(
             // measured distance can carry a noun the detector cannot supply.
             // Asked after the description exists, so it cannot spoil it, and
             // skipped entirely when the brain declines (the default).
-            val named = current.nameDirections(frame)
-                ?.let { DirectionNames.parse(it).copy(description = raw) }
-                ?: DirectionNames.parse(raw)
+            // Skipped entirely when we already know we are looking at a
+            // picture. The naming call asks "what is ahead" and a poster
+            // answers with what is PRINTED on it - "people", "furniture" -
+            // which would put the depicted people back into the spoken
+            // distance after the detector was careful to keep them out.
+            val named = if (describingAPicture) {
+                DirectionNames.parse(raw)
+            } else {
+                current.nameDirections(frame)
+                    ?.let { DirectionNames.parse(it).copy(description = raw) }
+                    ?: DirectionNames.parse(raw)
+            }
             withMeasuredDistance(frame, measured, named)
         } catch (e: Exception) {
             Log.w(TAG, "press degraded to fallback", e)

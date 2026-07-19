@@ -31,12 +31,12 @@ class SarvamSpeechIO(
     private val apiKey: String = BuildConfig.SARVAM_API_KEY,
 ) : SpeechIO {
 
-    override suspend fun speak(text: String, language: Language) {
+    override suspend fun speak(text: String, language: Language, translate: Boolean) {
         require(apiKey.isNotBlank()) {
             "Sarvam API key missing — set sarvam.api.key in android/local.properties"
         }
         val wav = withContext(Dispatchers.IO) {
-            synthesise(translated(text, language), language)
+            synthesise(if (translate) translated(text, language) else text, language)
         }
         play(wav)
     }

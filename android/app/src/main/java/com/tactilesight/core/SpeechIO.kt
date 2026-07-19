@@ -9,8 +9,20 @@ package com.tactilesight.core
  */
 interface SpeechIO {
 
-    /** Speak [text]. Suspends until the utterance finishes. */
-    suspend fun speak(text: String, language: Language = Language.ENGLISH)
+    /**
+     * Speak [text]. Suspends until the utterance finishes.
+     *
+     * [translate] false means the text is **already** in [language]. The
+     * default translates because the VLM answers in English, but that default
+     * is actively wrong for text we authored in the target language: the setup
+     * prompt "भाषा चुनें।" was translated *out* of Hindi and spoken as "Choose
+     * a language", because translate was told the source was English.
+     */
+    suspend fun speak(
+        text: String,
+        language: Language = Language.ENGLISH,
+        translate: Boolean = true,
+    )
 }
 
 /**

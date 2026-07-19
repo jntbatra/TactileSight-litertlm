@@ -45,6 +45,7 @@ import com.tactilesight.frame.ObjectDetector
 import com.tactilesight.speech.MicRecorder
 import com.tactilesight.speech.SarvamAsr
 import com.tactilesight.speech.SarvamSpeechIO
+import com.tactilesight.speech.SpokenSetup
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
@@ -70,6 +71,8 @@ class MainActivity : AppCompatActivity() {
     private val recorder = MicRecorder()
     private val detector by lazy { ObjectDetector(applicationContext) }
     private val asr = SarvamAsr()
+    private val speech by lazy { SarvamSpeechIO(cacheDir) }
+    private val setup by lazy { SpokenSetup(speech, recorder, asr) }
 
     /** The scene captured at press-down, answered about at release (#9). */
     private var heldFrame: Frame? = null
@@ -109,6 +112,16 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.describeButton.setOnClickListener { onPress() }
+        binding.setupButton.setOnClickListener { runSpokenSetup() }
+
+        // First launch asks by ear, so a blind user is never required to find
+        // a spinner to be understood. Once only - see Settings.isConfigured.
+        //
+        // Never while a dev hook is driving: setup speaks and records, and it
+        // raced a press sweep into a failed press before this guard existed.
+        val app = application as TactileSightApp
+        val drivenByHook = intent?.extras?.keySet().orEmpty().any { it in HOOK_EXTRAS }
+        if (!app.settings.isConfigured && hasMicPermission() && !drivenByHook) runSpokenSetup()
 
         // adb shell am start -n <pkg>/.MainActivity --ez writetag true
         if (intent?.getBooleanExtra(EXTRA_WRITE_TAG, false) == true) armTagWriting()
@@ -228,6 +241,44 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         BandTag.stopWriting(this)
+    }
+
+    /**
+     * Ask which language, by voice, in English and Hindi.
+     *
+     * Recording is time-boxed rather than button-held: setup happens before the
+     * user knows there is a button, and "speak after the tone" is the only
+     * instruction that needs no prior knowledge of the device.
+     */
+    private fun runSpokenSetup() {
+        val app = application as TactileSightApp
+        if (!hasMicPermission()) {
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQUEST_MIC)
+            return
+        }
+
+        binding.status.setText(R.string.status_setup_listening)
+        lifecycleScope.launch {
+            try {
+                val outcome = setup.run {
+                    if (!recorder.start()) return@run null
+                    delay(SETUP_LISTEN_MS)
+                    recorder.stop()
+                }
+                outcome.language?.let { app.settings.language = it }
+                // Marked configured even when nothing was understood: asking
+                // again on every launch is worse than staying in English, and
+                // the button is there for a second try.
+                app.settings.isConfigured = true
+                setUpLanguagePicker()
+                binding.status.text = outcome.spokenBack
+                speech.speak(outcome.spokenBack, app.settings.language)
+            } catch (e: Exception) {
+                Log.w(TAG, "spoken setup failed", e)
+                app.settings.isConfigured = true
+                binding.status.setText(R.string.status_ready)
+            }
+        }
     }
 
     private fun setUpAskButton() {
@@ -665,7 +716,8 @@ class MainActivity : AppCompatActivity() {
         binding.sceneSpinner.adapter =
             ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, labels)
 
-        binding.sceneSpinner.onSelect { position ->
+        // skipInitial = false: this callback is what draws the first preview.
+        binding.sceneSpinner.onSelect(skipInitial = false) { position ->
             browsable.selectedIndex = position
             lifecycleScope.launch {
                 try {
@@ -690,6 +742,7 @@ class MainActivity : AppCompatActivity() {
 
     /** Show a frame's three streams. Works for any source — see [DepthRenderer]. */
     private fun showFrame(frame: Frame) {
+        Log.i(TAG, "showFrame(${frame.sourceId})")
         // All three previews are trimmed to the one region both sensors share,
         // so flicking through the carousel compares like with like — and the
         // colour page is byte-identical to what the VLM was given.
@@ -766,11 +819,24 @@ class MainActivity : AppCompatActivity() {
      * choice overwrites the persisted one with whatever sits at position 0 —
      * so a saved language of हिन्दी silently became English on every launch.
      */
-    private fun Spinner.onSelect(action: (position: Int) -> Unit) {
+    /**
+     * [skipInitial] governs whether the callback Android fires when the adapter
+     * is first attached is treated as a user choice.
+     *
+     * It is not one, and for a spinner that *writes* something it is actively
+     * harmful: the language picker overwrote the saved language with position 0
+     * on every launch until this was skipped.
+     *
+     * But a spinner that only *reads* needs that first callback, and skipping
+     * it everywhere caused the opposite bug — the scene picker never rendered
+     * capture 1, so the app opened to a blank preview and only came alive when
+     * you changed scene. Hence a parameter rather than a rule.
+     */
+    private fun Spinner.onSelect(skipInitial: Boolean = true, action: (position: Int) -> Unit) {
         var seenInitialCallback = false
         onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(p: AdapterView<*>?, v: View?, position: Int, id: Long) {
-                if (!seenInitialCallback) {
+                if (skipInitial && !seenInitialCallback) {
                     seenInitialCallback = true
                     return
                 }
@@ -796,6 +862,12 @@ class MainActivity : AppCompatActivity() {
         const val EXTRA_WRITE_TAG = "writetag"
         const val EXTRA_FROM = "from"
         const val REQUEST_MIC = 1001
+
+        /** Long enough to say a language, short enough not to feel stuck. */
+        const val SETUP_LISTEN_MS = 4_000L
+
+        /** Any of these means a test is driving; leave the microphone alone. */
+        val HOOK_EXTRAS = setOf(EXTRA_SWEEP, EXTRA_HEXAGON, EXTRA_COMPARE, EXTRA_PRESS, EXTRA_WRITE_TAG)
         const val EXTRA_BUNDLES = "bundles"
         const val EXTRA_SCENES = "scenes"
 

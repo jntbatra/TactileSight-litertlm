@@ -59,7 +59,7 @@ class OrchestratorTest {
 
     private class FakeSpeech : SpeechIO {
         val spoken = mutableListOf<Pair<String, Language>>()
-        override suspend fun speak(text: String, language: Language) {
+        override suspend fun speak(text: String, language: Language, translate: Boolean) {
             spoken += text to language
         }
     }

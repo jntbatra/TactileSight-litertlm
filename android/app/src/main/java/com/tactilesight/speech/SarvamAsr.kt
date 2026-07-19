@@ -75,14 +75,47 @@ class SarvamAsr(
         }
     }
 
+    /** What was said, and what language it was said in. */
+    data class Heard(val transcript: String, val languageCode: String?)
+
+    /**
+     * Transcribe **without** translating, keeping the language the user spoke.
+     *
+     * Setup needs a different answer from a question does. A question is
+     * translated to English because the VLM works in English; here the language
+     * *is* the information. `/speech-to-text` returns both the words and a
+     * detected `language_code`, which gives two independent ways to resolve
+     * what the user wants:
+     *
+     * - they **name** it — "Hindi", "हिंदी", "Punjabi"
+     * - they **speak** it — anything at all, said in Hindi, reports `hi-IN`
+     *
+     * Either alone would fail someone: naming fails a user who does not know
+     * the English word for their language, and detection fails a user who
+     * answers in English because that is what the prompt used.
+     */
+    suspend fun listen(wav: ByteArray): Heard? = withContext(Dispatchers.IO) {
+        if (apiKey.isBlank() || wav.size < MINIMUM_USEFUL_BYTES) return@withContext null
+        try {
+            val response = postMultipart(wav, TRANSCRIBE_ENDPOINT)
+            val transcript = response.optString("transcript").trim()
+            val language = response.optString("language_code").takeIf { it.isNotBlank() }
+            Log.i(TAG, "heard ($language): $transcript")
+            if (transcript.isEmpty() && language == null) null else Heard(transcript, language)
+        } catch (e: Exception) {
+            Log.w(TAG, "listening failed", e)
+            null
+        }
+    }
+
     /**
      * Multipart by hand. `HttpURLConnection` has no multipart support and the
      * body is small and fixed-shape, so this is a boundary and three parts
      * rather than a dependency.
      */
-    private fun postMultipart(wav: ByteArray): JSONObject {
+    private fun postMultipart(wav: ByteArray, endpoint: String = ENDPOINT): JSONObject {
         val boundary = "----tactilesight$BOUNDARY_SEED"
-        val connection = (URL(ENDPOINT).openConnection() as HttpURLConnection).apply {
+        val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             doOutput = true
             connectTimeout = TIMEOUT_MS
@@ -121,6 +154,9 @@ class SarvamAsr(
 
         /** Any language in, English out — see the class docs. */
         const val ENDPOINT = "https://api.sarvam.ai/speech-to-text-translate"
+
+        /** Keeps the spoken language instead of translating it away. */
+        const val TRANSCRIBE_ENDPOINT = "https://api.sarvam.ai/speech-to-text"
         const val AUTH_HEADER = "api-subscription-key"
 
         /**

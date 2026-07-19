@@ -229,6 +229,17 @@
          to ask. Two on-screen buttons rather than one long-press, because a
          long-press on a touchscreen has no edge a finger can feel, and this
          screen is also how a sighted teammate demonstrates the band. -->
+    <!-- Setup runs itself on first launch; this is for changing your mind,
+         and for a demo that needs to show it twice. -->
+    <Button
+        android:id="@+id/setupButton"
+        style="@style/Widget.TactileSight.PrimaryButton"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:layout_marginTop="12dp"
+        android:text="@string/setup"
+        android:contentDescription="@string/setup_content_description" />
+
     <Button
         android:id="@+id/askButton"
         style="@style/Widget.TactileSight.PrimaryButton"
