@@ -54,6 +54,56 @@ object DistanceSpeech {
         return if (parts.isEmpty()) "" else parts.joinToString(", ") + "."
     }
 
+    /**
+     * The named-object clause: *"a person two metres to your left"*.
+     *
+     * Preferred over [clauseFor] when the detector found something, because a
+     * distance attached to a thing is worth more than a distance attached to a
+     * direction — "a person at two metres" tells you to stop; "two metres
+     * ahead" only tells you something is there.
+     *
+     * Deliberately narrow:
+     *
+     * - **Only objects depth could measure.** An object the camera saw but
+     *   depth could not reach is left entirely to the VLM's sentence, which
+     *   still names it — the requirement being that it is spoken *without* a
+     *   number, never with a guessed one.
+     * - **Nearest first, and few.** [MAX_SPOKEN] of them. The detector will
+     *   happily return eight chairs; a person listening needs the two things
+     *   that affect their next step, and a list is how you make someone stop
+     *   listening.
+     * - **Duplicates collapsed by label and side**, so a row of chairs becomes
+     *   one phrase rather than four.
+     */
+    fun clauseForObjects(measured: List<ObjectDistance.Measured>): String {
+        val spoken = measured
+            .filter { it.isKnown }
+            .filter { it.detection.label in NAMEABLE }
+            .sortedBy { it.millimetres }
+            .distinctBy { it.detection.label to sideOf(it.detection.centreX) }
+            .take(MAX_SPOKEN)
+
+        if (spoken.isEmpty()) return ""
+
+        return spoken.joinToString(", ") {
+            "${article(it.detection.label)} ${phrase(it.millimetres!!)} ${sideOf(it.detection.centreX)}"
+        } + "."
+    }
+
+    private fun sideOf(centreX: Float): String = when {
+        centreX < LEFT_EDGE -> "to your left"
+        centreX > RIGHT_EDGE -> "to your right"
+        else -> "in front of you"
+    }
+
+    /** "a person", "an umbrella" — spoken English, not a label dump. */
+    private fun article(label: String): String =
+        if (label.firstOrNull()?.lowercaseChar() in listOf('a', 'e', 'i', 'o', 'u')) {
+            "an $label"
+        } else {
+            "a $label"
+        }
+
     /** Spoken form of a distance. Words, not digits — this is read aloud. */
     private fun phrase(millimetres: Int): String {
         val metres = millimetres / 1000f
@@ -89,4 +139,37 @@ object DistanceSpeech {
      * stop listening.
      */
     private const val CLOSE_ENOUGH_MM = 2_000
+
+    /** Thirds, matching RegionDistance so the two never disagree about "left". */
+    private const val LEFT_EDGE = 0.33f
+    private const val RIGHT_EDGE = 0.67f
+
+    /**
+     * Two named objects is a sentence; four is an inventory. The detector
+     * returns up to eight and a listener acts on the first one.
+     */
+    private const val MAX_SPOKEN = 2
+
+    /**
+     * The only classes we will speak by name.
+     *
+     * **This exists because the detector confidently misnames things.** On the
+     * hackathon-hall captures YOLO called the bean bags *"a suitcase"* at 0.60
+     * confidence — the distance was right, the noun was wrong, and a blind user
+     * has no way to notice. The same reasoning that removed guessed gender
+     * applies: a confident wrong detail is worse than a missing one, because
+     * the whole device rests on the user trusting what it says.
+     *
+     * `person` is kept because it is what YOLO is genuinely best at, it is the
+     * single most navigation-critical thing in a frame, and it is a class where
+     * a near-miss is not possible — something either is a person or it is not.
+     *
+     * Everything else still contributes: an unnameable object falls through to
+     * the per-direction reading, which states a distance without claiming to
+     * know what is there. The VLM's own sentence supplies the identity, and it
+     * called those bean bags correctly.
+     *
+     * Widen this only with measurements on real captures, one class at a time.
+     */
+    private val NAMEABLE = setOf("person")
 }

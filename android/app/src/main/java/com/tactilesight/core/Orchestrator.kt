@@ -2,6 +2,8 @@ package com.tactilesight.core
 
 import android.util.Log
 import com.tactilesight.frame.DistanceSpeech
+import com.tactilesight.frame.ObjectDetector
+import com.tactilesight.frame.ObjectDistance
 import com.tactilesight.frame.RegionDistance
 
 /**
@@ -25,6 +27,12 @@ class Orchestrator(
      */
     private val brain: () -> SemanticBrain,
     private val speech: SpeechIO,
+    /**
+     * Optional: null when no detector is staged, and the answer falls back to
+     * per-direction distance. Named objects are better, but "a wall two metres
+     * ahead" still beats silence, and COCO cannot name a wall anyway.
+     */
+    private val detect: ((ByteArray) -> List<ObjectDetector.Detection>)? = null,
     /** Resolved per press, so switching language needs no restart. */
     private val language: () -> Language = { Language.ENGLISH },
 ) {
@@ -35,7 +43,9 @@ class Orchestrator(
         brain: SemanticBrain,
         speech: SpeechIO,
         language: Language = Language.ENGLISH,
-    ) : this(frames, { brain }, speech, { language })
+        // Named, not positional: adding a parameter above must not silently
+        // rebind this one. It did exactly that when `detect` was introduced.
+    ) : this(frames = frames, brain = { brain }, speech = speech, language = { language })
 
     /**
      * Handle one press. Returns what was spoken, so callers (and tests) can see
@@ -116,12 +126,39 @@ class Orchestrator(
     private fun withMeasuredDistance(frame: Frame, described: String): String {
         if (described == FALLBACK) return described
         return try {
-            val clause = DistanceSpeech.clauseFor(RegionDistance.measure(frame.depthMillimetres))
+            val clause = distanceClauseFor(frame)
             if (clause.isBlank()) described else "$clause $described"
         } catch (e: Exception) {
             Log.w(TAG, "distance unavailable — speaking the description alone", e)
             described
         }
+    }
+
+    /**
+     * Named objects when the detector found any it could measure, otherwise the
+     * per-direction reading.
+     *
+     * Preferring objects is the whole point of running a detector: "a person
+     * two metres in front of you" tells the user to stop, while "two metres
+     * ahead" only tells them something is there. But the fallback is not a
+     * consolation - COCO has no class for a wall, a doorway or a stair, and
+     * those are most of what a corridor contains.
+     */
+    private fun distanceClauseFor(frame: Frame): String {
+        val detector = detect
+        if (detector != null) {
+            val measured = ObjectDistance.measure(detector(frame.rgbJpeg), frame.depthMillimetres)
+            val named = DistanceSpeech.clauseForObjects(measured)
+            val unmeasured = measured.count { !it.isKnown }
+            if (unmeasured > 0) {
+                // Not an error. The camera sees wider than depth reaches, and
+                // glass and screens read invalid - those objects stay in the
+                // VLM's sentence, carrying no number.
+                Log.i(TAG, "$unmeasured detected object(s) had no usable depth")
+            }
+            if (named.isNotBlank()) return named
+        }
+        return DistanceSpeech.clauseFor(RegionDistance.measure(frame.depthMillimetres))
     }
 
     companion object {

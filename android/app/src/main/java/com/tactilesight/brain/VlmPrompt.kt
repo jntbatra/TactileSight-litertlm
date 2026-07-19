@@ -46,6 +46,11 @@ package com.tactilesight.brain
  *   confident wrong detail is worse than a missing one — the whole device rests
  *   on the user trusting what it says. "A person" costs nothing and is never
  *   wrong.
+ * - *"Where things repeat or crowd together, describe them as one group"* — the
+ *   grouping rule, widened from *"group related things into one phrase"* to name
+ *   the case it keeps failing on: a busy scene. Listing is what the model falls
+ *   back to when there is too much to say, and a list is unusable to someone
+ *   walking. Note the phrasing carries no example — see the hard-won rule below.
  * - *"Do not mention colours"* — added to the existing grouping rule after the
  *   model answered a lounge with *"a red bean bag chair, a green bean bag
  *   chair, a blue bean bag chair, a yellow bean bag chair"*. Colour is the
@@ -90,12 +95,12 @@ object VlmPrompt {
             "using \"in front of you\", \"to your left\", \"to your right\". " +
             "Lead with whatever affects their next step: obstacles, people, doorways, stairs, " +
             "and any objects or animals on the floor. " +
-            "If people are there, say where they are, in the third person, as \"a person\" or " +
-            "\"people\" — never guess their gender. " +
-            "If there are none, say nothing about people at all — never say that nobody is there. " +
-            "If a sign or board has words on it, read the words out; directions and danger " +
-            "warnings matter most. If there is no writing, say nothing about signs. " +
-            "Group related things into one phrase rather than listing them. " +
+            "Where things repeat or crowd together, describe them as one group rather than " +
+            "listing them. " +
+            "Say where people are, as \"a person\" or \"people\" — never guess their gender; " +
+            "if there are none, say nothing about people at all. " +
+            "If a sign or board has words on it, read the words out; if it has none, say " +
+            "nothing about signs. " +
             "Do not mention colours. No preamble. " +
             "Only describe what is really there. Never state a distance. Answer in English."
 

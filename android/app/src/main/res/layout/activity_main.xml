@@ -175,7 +175,7 @@
         android:layout_marginTop="4dp"
         android:layout_marginBottom="20dp" />
 
-    <!-- The triplet as a carousel: colour, infrared, depth. Wraps to the image
+    <!-- The pair as a carousel: colour and depth. Wraps to the image
          rather than stretching to fill, so the card stays the size of what it
          shows. -->
     <LinearLayout

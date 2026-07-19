@@ -57,6 +57,9 @@ android {
         // Depth is read straight out of the APK; leaving it uncompressed avoids
         // inflating 600 KB per capture on every load.
         noCompress += "npy"
+        // TFLite memory-maps its model straight out of the APK; a compressed
+        // asset cannot be mapped and has to be copied to disk first.
+        noCompress += "tflite"
     }
 
     packaging {
@@ -102,6 +105,11 @@ dependencies {
     // native libs: libgeniex_plugin_qairt.so (Hexagon NPU, via libQnnHtpV81.so
     // for 8 Elite Gen 5) and libgeniex_plugin_llama_cpp.so (GPU/CPU fallback).
     implementation("com.qualcomm.qti:geniex-android:0.3.12")
+
+    // LiteRT (TFLite) for the YOLOv11 detector. Separate runtime from GenieX
+    // on purpose: GenieX eats QAIRT bundles and GGUF, not .tflite, and the
+    // detector is a CNN - the graph shape ONNX/TFLite runtimes are good at.
+    implementation("org.tensorflow:tensorflow-lite:2.16.1")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")

@@ -20,7 +20,6 @@ class OrchestratorTest {
      */
     private val frame = Frame(
         rgbJpeg = byteArrayOf(1, 2, 3),
-        irJpeg = byteArrayOf(4, 5, 6),
         depthMillimetres = DepthMap(2, 2, shortArrayOf(0, 0, 0, 0)),
         capturedAtMillis = 1000L,
         sourceId = "scene_1_id001",

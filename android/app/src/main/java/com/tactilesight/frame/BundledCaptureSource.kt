@@ -35,7 +35,6 @@ class BundledCaptureSource(
         val dir = "$ROOT/$sceneId"
         Frame(
             rgbJpeg = read("$dir/rgb.jpg"),
-            irJpeg = read("$dir/ir.jpg"),
             depthMillimetres = assets.open("$dir/depth_raw.npy").use(NpyReader::readDepthMap),
             // These are recorded captures; the honest capture time is the one in
             // the file, not now. Read from metadata.json when #6 needs it.

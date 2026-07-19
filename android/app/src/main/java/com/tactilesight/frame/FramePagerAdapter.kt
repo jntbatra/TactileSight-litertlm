@@ -14,7 +14,7 @@ data class FramePage(
 )
 
 /**
- * The three streams of a capture, swipeable: colour, infrared, depth.
+ * The two streams of a capture, swipeable: colour and depth.
  *
  * Shown side by side they were unreadable at a third of the width each — and
  * the IR panel in particular reads as a black rectangle, because the IR frames

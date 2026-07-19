@@ -21,9 +21,16 @@ import com.tactilesight.core.BrowsableFrameSource
 object PromptBenchmark {
 
     /**
-     * The prompt as it stands (2026-07-19), after a night of additions:
+     * The prompt as it stands (2026-07-19): a night of additions —
      * gender-neutral people, silence-on-absence for people and signs, no
-     * colours. ~120 words.
+     * colours — then trimmed from 141 to 124 words, with the grouping rule
+     * widened to name busy scenes.
+     *
+     * The trim dropped *"in the third person"*, *"never say that nobody is
+     * there"* and *"directions and danger warnings matter most"* as redundant
+     * with the clauses they sat beside. Redundant on a reading; **unverified on
+     * the device**. That is precisely the anecdote-driven change this benchmark
+     * exists to catch, so run it before trusting the trim.
      */
     val VARIANT_A: String = VlmPrompt.describe()
 

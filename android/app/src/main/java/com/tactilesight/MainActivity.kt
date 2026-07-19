@@ -37,6 +37,7 @@ import com.tactilesight.frame.DepthRenderer
 import com.tactilesight.frame.FramePage
 import com.tactilesight.frame.FramePagerAdapter
 import com.tactilesight.frame.FrameSourceKind
+import com.tactilesight.frame.ObjectDetector
 import com.tactilesight.speech.MicRecorder
 import com.tactilesight.speech.SarvamAsr
 import com.tactilesight.speech.SarvamSpeechIO
@@ -63,6 +64,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var frames: FrameSource
     private lateinit var orchestrator: Orchestrator
     private val recorder = MicRecorder()
+    private val detector by lazy { ObjectDetector(applicationContext) }
     private val asr = SarvamAsr()
 
     /** The scene captured at press-down, answered about at release (#9). */
@@ -80,6 +82,10 @@ class MainActivity : AppCompatActivity() {
             // Owned by the Application, so rotation never drops the model.
             brain = { (application as TactileSightApp).brain },
             speech = SarvamSpeechIO(cacheDir),
+            // Named objects get their own distance; everything else falls back
+            // to the per-direction reading. Constructed once - the interpreter
+            // maps a 10 MB model and must not be rebuilt per press.
+            detect = detector.takeIf { it.isAvailable }?.let { { jpeg: ByteArray -> it.detect(jpeg) } },
             // Resolved per press, like the brain: changing language must not
             // need a restart, and must not reload a multi-gigabyte model.
             language = { (application as TactileSightApp).settings.language },
@@ -612,8 +618,6 @@ class MainActivity : AppCompatActivity() {
         // reach them), depth and IR lose their top and bottom (colour cannot
         // see them). See DepthCoverage.COLOUR / DepthCoverage.DEPTH.
         val colour = DepthCoverage.cropToMeasurableRegion(frame.rgbJpeg).toBitmap()
-        val infrared = frame.irJpeg.toBitmap()
-            ?.let { DepthCoverage.crop(it, DepthCoverage.DEPTH) }
         val depth = DepthCoverage.crop(
             DepthRenderer.render(frame.depthMillimetres),
             DepthCoverage.DEPTH,
@@ -622,11 +626,10 @@ class MainActivity : AppCompatActivity() {
         pages.submit(
             listOf(
                 FramePage(label(R.string.stream_rgb, colour), getString(R.string.preview_rgb), colour),
-                FramePage(label(R.string.stream_ir, infrared), getString(R.string.preview_ir), infrared),
                 FramePage(label(R.string.stream_depth, depth), getString(R.string.preview_depth), depth),
             ),
         )
-        buildDots(count = 3, selected = binding.framePager.currentItem)
+        buildDots(count = 2, selected = binding.framePager.currentItem)
     }
 
     /** Name plus the dimensions actually on screen — so a crop is visible as a number. */

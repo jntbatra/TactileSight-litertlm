@@ -25,11 +25,9 @@
     <string name="status_no_mic">Microphone permission is needed to ask a question.</string>
 
     <string name="stream_rgb">Colour</string>
-    <string name="stream_ir">Infrared</string>
     <string name="stream_depth">Depth</string>
 
     <string name="preview_rgb">Colour image from the band camera</string>
-    <string name="preview_ir">Infrared image from the band camera</string>
     <string name="preview_depth">Depth image from the band camera</string>
 
     <string name="status_ready">Ready. Press to describe the scene.</string>
