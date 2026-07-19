@@ -86,18 +86,7 @@ object VlmPrompt {
      * thinking and hit the token cap before it answers.
      */
     fun describe(): String =
-        "You are guiding a blind person. In one short, natural sentence, say what is ahead, " +
-            "using \"in front of you\", \"to your left\", \"to your right\". " +
-            "Lead with whatever affects their next step: obstacles, people, doorways, stairs, " +
-            "and any objects or animals on the floor. " +
-            "If people are there, say where they are, in the third person, as \"a person\" or " +
-            "\"people\" — never guess their gender. " +
-            "If there are none, say nothing about people at all — never say that nobody is there. " +
-            "If a sign or board has words on it, read the words out; directions and danger " +
-            "warnings matter most. If there is no writing, say nothing about signs. " +
-            "Group related things into one phrase rather than listing them. " +
-            "Do not mention colours. No preamble. " +
-            "Only describe what is really there. Never state a distance. Answer in English."
+        "You are guiding a blind person. In one short, natural sentence, say what is ahead, using \"in front of you\", \"to your left\", \"to your right\". Lead with whatever affects their next step, including anything on the floor. If people are there, say where, as \"a person\" or \"people\" — never guess their gender; if there are none, say nothing about people. If a sign has words on it, read the words out; if not, say nothing about signs. Do not mention colours or distance. Only describe what is really there. Answer in English."
 
     /** The user asked something specific about the scene. */
     fun query(question: String): String =

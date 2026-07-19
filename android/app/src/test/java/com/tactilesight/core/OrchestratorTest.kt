@@ -11,12 +11,24 @@ import org.junit.Test
  */
 class OrchestratorTest {
 
+    /**
+     * Depth is deliberately all-invalid here. These tests are about the press
+     * pipeline - capture, brain resolution, speech - and a frame with usable
+     * depth would prepend a measured distance to every expected string,
+     * coupling tests that have nothing to do with distance to the wording of
+     * DistanceSpeech. Distance has its own tests below and its own fixture.
+     */
     private val frame = Frame(
         rgbJpeg = byteArrayOf(1, 2, 3),
         irJpeg = byteArrayOf(4, 5, 6),
-        depthMillimetres = DepthMap(2, 2, shortArrayOf(1000, 0, 2000, 3000)),
+        depthMillimetres = DepthMap(2, 2, shortArrayOf(0, 0, 0, 0)),
         capturedAtMillis = 1000L,
         sourceId = "scene_1_id001",
+    )
+
+    /** Same frame, but every pixel a valid two-metre reading. */
+    private val measurableFrame = frame.copy(
+        depthMillimetres = DepthMap(8, 8, ShortArray(64) { 2000 }),
     )
 
     private class FakeFrameSource(
@@ -173,5 +185,44 @@ class OrchestratorTest {
             listOf("first engine", "second engine"),
             speech.spoken.map { it.first },
         )
+    }
+
+    @Test
+    fun `a measured distance is spoken before the description`() = runTest {
+        // ADR-0011's two-stage answer: how far, then what. The description is
+        // carried through unchanged - the distance is added to it, never
+        // replaces or edits it.
+        val speech = FakeSpeech()
+        Orchestrator(FakeFrameSource(measurableFrame), FakeBrain("a doorway"), speech).onPress()
+
+        val spoken = speech.spoken.single().first
+        assertTrue(spoken, spoken.endsWith("a doorway"))
+        assertTrue(spoken, spoken.contains("two metres"))
+    }
+
+    @Test
+    fun `no distance is spoken when depth cannot measure the scene`() = runTest {
+        // The description still reaches the user, carrying no number. This is
+        // the case the VLM prompt's "never state a distance" rule depends on:
+        // an object the camera sees but depth cannot reach is still named.
+        val speech = FakeSpeech()
+        Orchestrator(FakeFrameSource(frame), FakeBrain("a doorway"), speech).onPress()
+
+        assertEquals("a doorway", speech.spoken.single().first)
+    }
+
+    @Test
+    fun `the fallback is never given a distance`() = runTest {
+        // "Sorry, I could not see that" with "two metres ahead" bolted on
+        // front would be the device confidently measuring a scene it just
+        // admitted it could not see.
+        val speech = FakeSpeech()
+        Orchestrator(
+            FakeFrameSource(measurableFrame),
+            FakeBrain(failWith = IllegalStateException("model died")),
+            speech,
+        ).onPress()
+
+        assertEquals(Orchestrator.FALLBACK, speech.spoken.single().first)
     }
 }

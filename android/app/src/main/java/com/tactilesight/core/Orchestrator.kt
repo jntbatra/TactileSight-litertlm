@@ -1,6 +1,8 @@
 package com.tactilesight.core
 
 import android.util.Log
+import com.tactilesight.frame.DistanceSpeech
+import com.tactilesight.frame.RegionDistance
 
 /**
  * Press in, speech out. Holds the three seams together and owns exactly one
@@ -49,10 +51,11 @@ class Orchestrator(
             val frame = frames.capture()
             // A blank answer is as dead as a crash — models do return empty
             // strings — so it degrades the same way.
-            current.describe(frame, question).spoken.ifBlank {
+            val described = current.describe(frame, question).spoken.ifBlank {
                 Log.w(TAG, "${current.name} returned a blank answer")
                 FALLBACK
             }
+            withMeasuredDistance(frame, described)
         } catch (e: Exception) {
             Log.w(TAG, "press degraded to fallback", e)
             FALLBACK
@@ -60,6 +63,30 @@ class Orchestrator(
 
         speech.speak(text, language())
         return text
+    }
+
+    /**
+     * Distance first, then the description (ADR-0011's two-stage answer).
+     *
+     * This is the other half of the VLM's "never state a distance" rule. The
+     * model is forbidden from guessing precisely so that this number, when it
+     * is spoken, is always a measurement — and when depth cannot reach a
+     * direction, nothing is said about how far, while the description still
+     * names whatever was seen there.
+     *
+     * A failure here must not cost the user their answer. Depth is an
+     * enhancement to a sentence we already have; if measuring throws, the press
+     * still speaks (hard rule #4).
+     */
+    private fun withMeasuredDistance(frame: Frame, described: String): String {
+        if (described == FALLBACK) return described
+        return try {
+            val clause = DistanceSpeech.clauseFor(RegionDistance.measure(frame.depthMillimetres))
+            if (clause.isBlank()) described else "$clause $described"
+        } catch (e: Exception) {
+            Log.w(TAG, "distance unavailable — speaking the description alone", e)
+            described
+        }
     }
 
     companion object {
