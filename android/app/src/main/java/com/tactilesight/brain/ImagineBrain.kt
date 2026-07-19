@@ -48,7 +48,7 @@ class ImagineBrain(
 
     override val name: String = "$label ($model)"
 
-    override suspend fun describe(frame: Frame, question: String?): Answer =
+    override suspend fun describe(frame: Frame, question: String?, surfaceIsFlat: Boolean): Answer =
         withContext(Dispatchers.IO) {
             // The same crop every other brain sees, so the destination does not
             // change what the model is looking at.

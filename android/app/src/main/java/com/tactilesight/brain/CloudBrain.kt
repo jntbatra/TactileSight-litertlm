@@ -39,7 +39,7 @@ class CloudBrain(
     private val language: String = "en",
 ) : SemanticBrain {
 
-    override suspend fun describe(frame: Frame, question: String?): Answer =
+    override suspend fun describe(frame: Frame, question: String?, surfaceIsFlat: Boolean): Answer =
         withContext(Dispatchers.IO) {
             // The same crop the on-device brain sees, so switching destination
             // does not silently change what the model is looking at.

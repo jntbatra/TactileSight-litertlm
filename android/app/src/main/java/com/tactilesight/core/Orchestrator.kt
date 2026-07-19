@@ -94,13 +94,32 @@ class Orchestrator(
     suspend fun answerAbout(frame: Frame?, question: String? = null): String {
         val current = brain()
         val text = if (frame == null) FALLBACK else try {
+            // Measure before describing: whether the thing ahead is a flat
+            // plane is a fact the model cannot see for itself, and it changes
+            // the description rather than being appended to it.
+            val measured = measure(frame)
+            // Only when EVERY person in frame is flat. A scene can hold both a
+            // poster and real people - a hall with a banner on the wall and
+            // people sitting in front of it - and an `any` rule hijacked the
+            // whole description to talk about the banner, losing the people who
+            // were actually there. That is a worse failure than the one it fixed.
+            //
+            // Only "person": a flat "chair" against a wall is a measurement
+            // artefact worth ignoring; a flat person is a poster, and that is
+            // the sentence the user heard go wrong.
+            val people = measured.filter { it.isKnown && it.detection.label == "person" }
+            val describingAPicture = people.isNotEmpty() && people.none { it.isSolid }
+            if (describingAPicture) {
+                Log.i(TAG, "every person in frame is flat — describing it as a picture")
+            }
+
             // A blank answer is as dead as a crash — models do return empty
             // strings — so it degrades the same way.
-            val described = current.describe(frame, question).spoken.ifBlank {
+            val described = current.describe(frame, question, describingAPicture).spoken.ifBlank {
                 Log.w(TAG, "${current.name} returned a blank answer")
                 FALLBACK
             }
-            withMeasuredDistance(frame, described)
+            withMeasuredDistance(frame, measured, described)
         } catch (e: Exception) {
             Log.w(TAG, "press degraded to fallback", e)
             FALLBACK
@@ -110,23 +129,38 @@ class Orchestrator(
         return text
     }
 
+    /** Detections with their measured distance and flatness, or empty. */
+    private fun measure(frame: Frame): List<ObjectDistance.Measured> {
+        val detector = detect ?: return emptyList()
+        return try {
+            ObjectDistance.measure(detector(frame.rgbJpeg), frame.depthMillimetres)
+        } catch (e: Exception) {
+            Log.w(TAG, "detection failed — continuing without object distances", e)
+            emptyList()
+        }
+    }
+
     /**
      * Distance first, then the description (ADR-0011's two-stage answer).
      *
      * This is the other half of the VLM's "never state a distance" rule. The
-     * model is forbidden from guessing precisely so that this number, when it
-     * is spoken, is always a measurement — and when depth cannot reach a
-     * direction, nothing is said about how far, while the description still
-     * names whatever was seen there.
+     * model is forbidden from guessing so that this number, when it is spoken,
+     * is always a measurement — and when depth cannot reach a direction,
+     * nothing is said about how far, while the description still names
+     * whatever was seen there.
      *
      * A failure here must not cost the user their answer. Depth is an
      * enhancement to a sentence we already have; if measuring throws, the press
      * still speaks (hard rule #4).
      */
-    private fun withMeasuredDistance(frame: Frame, described: String): String {
+    private fun withMeasuredDistance(
+        frame: Frame,
+        measured: List<ObjectDistance.Measured>,
+        described: String,
+    ): String {
         if (described == FALLBACK) return described
         return try {
-            val clause = distanceClauseFor(frame)
+            val clause = distanceClauseFor(frame, measured)
             if (clause.isBlank()) described else "$clause $described"
         } catch (e: Exception) {
             Log.w(TAG, "distance unavailable — speaking the description alone", e)
@@ -144,10 +178,8 @@ class Orchestrator(
      * consolation - COCO has no class for a wall, a doorway or a stair, and
      * those are most of what a corridor contains.
      */
-    private fun distanceClauseFor(frame: Frame): String {
-        val detector = detect
-        if (detector != null) {
-            val measured = ObjectDistance.measure(detector(frame.rgbJpeg), frame.depthMillimetres)
+    private fun distanceClauseFor(frame: Frame, measured: List<ObjectDistance.Measured>): String {
+        if (measured.isNotEmpty()) {
             val named = DistanceSpeech.clauseForObjects(measured)
             val unmeasured = measured.count { !it.isKnown }
             if (unmeasured > 0) {

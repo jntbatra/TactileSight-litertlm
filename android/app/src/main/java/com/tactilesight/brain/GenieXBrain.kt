@@ -100,8 +100,10 @@ class GenieXBrain(
         val computeUnit: String,
     )
 
-    override suspend fun describe(frame: Frame, question: String?): Answer =
-        describeWith(frame, promptOverride()?.takeIf { it.isNotBlank() } ?: VlmPrompt.forRequest(question))
+    override suspend fun describe(frame: Frame, question: String?, surfaceIsFlat: Boolean): Answer {
+        val base = promptOverride()?.takeIf { it.isNotBlank() } ?: VlmPrompt.forRequest(question)
+        return describeWith(frame, if (surfaceIsFlat) VlmPrompt.withFlatSurface(base) else base)
+    }
 
     /**
      * Describe [frame] with an explicit [prompt], bypassing [VlmPrompt].

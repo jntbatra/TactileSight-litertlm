@@ -109,6 +109,52 @@ object VlmPrompt {
         "Look at the image and answer in one short sentence, in English. " +
             "Do not mention distance. Question: $question"
 
+    /**
+     * What to say when depth has established the thing ahead is a flat plane.
+     *
+     * **Replaces the describe prompt rather than appending to it**, and that is
+     * the whole point. The first attempt added the fact as a final sentence to
+     * the existing ~120-word prompt and the model ignored it completely — it
+     * still answered "a person to your right with an object on their left".
+     * Measured, not assumed: the flag fired, the sentence was in the prompt,
+     * and the output was unchanged.
+     *
+     * That is the same length failure the rest of this file documents. A rider
+     * on a long prompt competes with every clause above it, and "say where
+     * people are" wins because it is stated three times over. A short prompt
+     * with one job does not have that problem.
+     */
+    private const val FLAT_SURFACE =
+        "You are guiding a blind person. The depth sensor has measured the surface ahead " +
+            "and it is completely flat, so what you can see is printed or on a screen — " +
+            "a poster, photograph, television or sign — not a real scene. " +
+            "In one short sentence, say that there is a poster or screen ahead and what it " +
+            "shows. Never describe the people or objects in it as if they were really there. " +
+            "Answer in English."
+
     fun forRequest(question: String?): String =
         if (question.isNullOrBlank()) describe() else query(question)
+
+    /**
+     * A fact the phone measured, handed to the model so it stops describing a
+     * picture as if it were the room.
+     *
+     * The failure this fixes: a life-size poster of two people. The VLM has no
+     * way to tell it from the real thing — it is a photograph of a photograph —
+     * and answered "a person holds an object near their body". Depth knows
+     * better, because a poster fits a plane to within sensor noise while a body
+     * does not (ObjectDistance.Measured.isSolid).
+     *
+     * **This is a measurement, not a hint.** It is only appended when the depth
+     * sensor actually established flatness, so the model is never asked to
+     * reconcile the image with a guess.
+     *
+     * Deliberately *not* done by feeding the depth image alongside the colour
+     * one. The runtime supports two images, but a 4B VLM has never been trained
+     * to read a JET colormap as distance and would most likely describe it as a
+     * colourful abstract picture — and it would double the vision tokens on
+     * every press. We already computed the answer; fifteen words of English is
+     * a more reliable channel than hoping the model infers it.
+     */
+    fun withFlatSurface(prompt: String): String = FLAT_SURFACE
 }

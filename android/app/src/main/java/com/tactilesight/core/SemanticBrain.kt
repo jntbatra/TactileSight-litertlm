@@ -27,7 +27,18 @@ interface SemanticBrain {
      * Describe [frame], optionally answering [question]. Answers in English;
      * translation to the user's language happens in [SpeechIO] (ADR-0012).
      */
-    suspend fun describe(frame: Frame, question: String? = null): Answer
+    /**
+     * [surfaceIsFlat] carries one measured fact the model cannot see for
+     * itself: the thing it is looking at fits a plane, so a scene or people
+     * depicted there are a poster or a screen rather than the real thing.
+     * A parameter rather than a second method - the alternative was two
+     * describe() calls that differed by one sentence.
+     */
+    suspend fun describe(
+        frame: Frame,
+        question: String? = null,
+        surfaceIsFlat: Boolean = false,
+    ): Answer
 
     /** Release the model. Called only on engine/model switch. */
     fun close() {}

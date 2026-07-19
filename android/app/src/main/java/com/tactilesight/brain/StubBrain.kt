@@ -13,6 +13,6 @@ class StubBrain : SemanticBrain {
 
     override val name: String = "Stub"
 
-    override suspend fun describe(frame: Frame, question: String?): Answer =
+    override suspend fun describe(frame: Frame, question: String?, surfaceIsFlat: Boolean): Answer =
         Answer("A clear path ahead, with a doorway on the right.")
 }

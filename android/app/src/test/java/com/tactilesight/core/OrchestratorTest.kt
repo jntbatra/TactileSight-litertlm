@@ -49,7 +49,7 @@ class OrchestratorTest {
         override val name = "Fake"
         var lastQuestion: String? = null
         var describes = 0
-        override suspend fun describe(frame: Frame, question: String?): Answer {
+        override suspend fun describe(frame: Frame, question: String?, surfaceIsFlat: Boolean): Answer {
             describes++
             lastQuestion = question
             failWith?.let { throw it }
