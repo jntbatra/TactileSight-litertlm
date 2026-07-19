@@ -1,0 +1,3 @@
+[submodule "band"]
+	path = band
+	url = https://github.com/VidhuSarwal/tactile-sight.git
