@@ -15,8 +15,6 @@
     <string name="label_prompt">Prompt</string>
     <string name="hint_prompt">Prompt sent to the model</string>
     <string name="reset_prompt">Reset to default</string>
-    <string name="privacy_mode">Privacy mode — never send imagery to the cloud</string>
-    <string name="privacy_blocked">Privacy mode is on, so %s is unavailable. Using on-device.</string>
     <string name="endpoint_missing">Set a server address first.</string>
 
     <string name="describe">Describe</string>

@@ -20,19 +20,31 @@ import com.tactilesight.core.BrowsableFrameSource
  */
 object PromptBenchmark {
 
-    /** The prompt as it stands, with the sign-reading clause. */
-    const val VARIANT_A =
-        "In one short sentence, say what is ahead, including any objects or animals on the floor, " +
-            "and whether each is on the left, center, or right. " +
-            "Read out any sign, board or written text you can see. " +
-            "Name the things directly, no preamble. " +
-            "Only describe what is really there. Do not mention distance. Answer in English."
+    /**
+     * The prompt as it stands (2026-07-19), after a night of additions:
+     * gender-neutral people, silence-on-absence for people and signs, no
+     * colours. ~120 words.
+     */
+    val VARIANT_A: String = VlmPrompt.describe()
 
-    /** Same requirements, fewer clauses — does terseness restore obedience? */
+    /**
+     * The same prompt before that night's clauses — 83 words.
+     *
+     * This is the control for a specific suspicion: that the additions, each
+     * justified on its own, together made the model worse. Every clause was
+     * added to fix something real and verified against the scene it fixed. None
+     * was checked for what it cost elsewhere, and prompt.py's own docstring
+     * warns that an elaborate multi-rule prompt makes a reasoning model narrate
+     * and pad. Length is a failure mode; this measures whether we hit it.
+     */
     const val VARIANT_B =
-        "In one short sentence, say what is ahead — objects or animals on the floor, and any sign " +
-            "or written text, each as left, center, or right. " +
-            "No preamble, no distances, only what is really there. Answer in English."
+        "You are guiding a blind person. In one short, natural sentence, say what is ahead, " +
+            "using \"in front of you\", \"to your left\", \"to your right\". " +
+            "Lead with whatever affects their next step: obstacles, people, doorways, stairs, " +
+            "and any objects or animals on the floor. " +
+            "Read out any sign, board or written text, especially directions and danger warnings. " +
+            "Group related things into one phrase rather than listing them. No preamble. " +
+            "Only describe what is really there. Never state a distance. Answer in English."
 
     /** Openings the prompt forbids; the model produces them anyway. */
     private val PREAMBLES = listOf(

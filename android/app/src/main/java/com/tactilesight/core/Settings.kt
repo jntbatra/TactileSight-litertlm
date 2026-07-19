@@ -4,7 +4,7 @@ import android.content.Context
 
 /**
  * The few choices that outlive a launch: where to describe, which server, and
- * whether privacy mode is on.
+ * which destination describes the frame.
  *
  * These persist because re-typing a tunnel URL on a phone keyboard at a demo
  * is exactly the kind of friction that makes a working system look broken.
@@ -62,25 +62,6 @@ class Settings(context: Context) {
         get() = Language.fromCode(prefs.getString(KEY_LANGUAGE, null))
         set(value) = prefs.edit().putString(KEY_LANGUAGE, value.sarvamCode).apply()
 
-    /**
-     * When on, imagery must not leave the device to a third party (hard rule
-     * #7). Enforced in brain resolution, not in the UI — see [effectiveMode].
-     */
-    var privacyMode: Boolean
-        get() = prefs.getBoolean(KEY_PRIVACY, false)
-        set(value) = prefs.edit().putBoolean(KEY_PRIVACY, value).apply()
-
-    /**
-     * The mode that will actually be used. Privacy mode forces anything it
-     * forbids back to [BrainMode.ON_DEVICE_NPU] rather than failing the press,
-     * because hard rule #4 says every press yields speech.
-     *
-     * Resolving it here means a stale saved preference — privacy switched on
-     * while the private server was selected, then a restart — cannot leak a frame.
-     */
-    val effectiveMode: BrainMode
-        get() = mode.takeIf { it.isAllowedUnderPrivacy(privacyMode) } ?: BrainMode.ON_DEVICE_NPU
-
     fun urlFor(mode: BrainMode): String = when (mode) {
         BrainMode.PRIVATE_SERVER -> privateServerUrl
         BrainMode.ON_DEVICE_NPU -> ""
@@ -97,7 +78,6 @@ class Settings(context: Context) {
         const val FILE = "tactilesight"
         const val KEY_MODE = "brain_mode"
         const val KEY_PRIVATE_URL = "private_server_url"
-        const val KEY_PRIVACY = "privacy_mode"
         const val KEY_PROMPT = "custom_prompt"
         const val KEY_LANGUAGE = "language"
         const val KEY_PRIVATE_OPENAI = "private_server_is_openai"

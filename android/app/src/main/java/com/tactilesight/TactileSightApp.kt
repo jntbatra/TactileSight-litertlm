@@ -43,24 +43,22 @@ class TactileSightApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        applyMode(settings.effectiveMode)
+        applyMode(settings.mode)
     }
 
     /**
      * Switch to [mode], releasing whatever model was resident.
      *
-     * Goes through [Settings.effectiveMode], so privacy mode cannot be talked
-     * around: asking for any off-device mode with privacy on lands on-device
-     * instead. Hard rule #7 says privacy must actually block imagery leaving
-     * the phone, and a check that lives only in a spinner listener is one
-     * refactor away from not existing.
+     * There is no privacy re-resolution any more: with the cloud tier gone the
+     * picker offers on-device or our own laptop, and the selection itself is
+     * the statement about whether the frame leaves the phone. [BrainMode]
+     * still carries `sendsImageryOffDevice`, which is what the UI uses to
+     * decide an endpoint is needed — and what a future third-party tier would
+     * have to declare.
      */
     fun applyMode(requested: BrainMode) {
         settings.mode = requested
-        val mode = settings.effectiveMode
-        if (mode != requested) {
-            Log.w(TAG, "$requested blocked by privacy mode — using $mode")
-        }
+        val mode = requested
 
         // Rebuild only when the configuration actually changed. Without this,
         // anything that calls applyMode — including a text-field callback that

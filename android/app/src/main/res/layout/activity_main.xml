@@ -160,18 +160,6 @@
         android:textColor="@color/qualcomm_blue"
         android:textSize="13sp" />
 
-    <!-- Privacy is a switch, not a menu: it must be obvious at a glance
-         whether imagery can leave the device. -->
-    <androidx.appcompat.widget.SwitchCompat
-        android:id="@+id/privacySwitch"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:layout_marginBottom="20dp"
-        android:text="@string/privacy_mode"
-        android:textColor="@color/on_surface"
-        android:textSize="14sp" />
-
     <TextView
         android:id="@+id/captureLabel"
         style="@style/TextAppearance.TactileSight.Label"

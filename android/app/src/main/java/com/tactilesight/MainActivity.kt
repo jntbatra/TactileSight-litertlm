@@ -196,12 +196,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Where the frame gets described: on the phone, on our server, or in the
-     * cloud. The endpoint field appears only for the two that need an address.
+     * Where the frame gets described: on the phone, or on our own server. The
+     * endpoint field appears only for the one that needs an address.
      *
-     * The privacy rule is *not* enforced here. This screen only reflects it —
-     * [TactileSightApp.applyMode] resolves the mode that actually runs, so a
-     * blocked destination cannot be reached by any path through the UI.
+     * There is no privacy toggle. With the cloud tier gone the choice is
+     * on-device or our own laptop, and which one is selected already says
+     * whether the frame leaves the phone — a switch on top of that would be a
+     * second control for a decision the picker has already made.
      */
     private fun setUpBrainPicker() {
         val app = application as TactileSightApp
@@ -212,37 +213,23 @@ class MainActivity : AppCompatActivity() {
             android.R.layout.simple_spinner_dropdown_item,
             modes.map { it.displayName },
         )
-        binding.brainSpinner.setSelection(modes.indexOf(app.settings.effectiveMode))
-        binding.privacySwitch.isChecked = app.settings.privacyMode
+        binding.brainSpinner.setSelection(modes.indexOf(app.settings.mode))
 
         binding.brainSpinner.onSelect { position ->
             val requested = modes[position]
             app.applyMode(requested)
-            showEndpointFor(app.settings.effectiveMode)
+            showEndpointFor(app.settings.mode)
 
-            if (app.settings.effectiveMode != requested) {
-                toast(getString(R.string.privacy_blocked, requested.displayName))
-                binding.brainSpinner.setSelection(modes.indexOf(app.settings.effectiveMode))
-            } else if (requested.sendsImageryOffDevice && app.settings.urlFor(requested).isBlank()) {
+            if (requested.sendsImageryOffDevice && app.settings.urlFor(requested).isBlank()) {
                 toast(getString(R.string.endpoint_missing))
             }
-            showBrain()
-        }
-
-        binding.privacySwitch.setOnCheckedChangeListener { _, isChecked ->
-            app.settings.privacyMode = isChecked
-            // Re-resolve immediately: switching privacy on while a cloud brain
-            // is resident must drop it now, not at the next press.
-            app.applyMode(app.settings.mode)
-            binding.brainSpinner.setSelection(modes.indexOf(app.settings.effectiveMode))
-            showEndpointFor(app.settings.effectiveMode)
             showBrain()
         }
 
         // The address is saved as it is typed, so a tunnel URL survives the
         // app being killed — which ColorOS does aggressively.
         binding.endpointField.doAfterTextChanged { text ->
-            val mode = app.settings.effectiveMode
+            val mode = app.settings.mode
             if (mode.sendsImageryOffDevice) {
                 app.settings.setUrlFor(mode, text?.toString().orEmpty())
                 app.applyMode(mode)
@@ -252,11 +239,11 @@ class MainActivity : AppCompatActivity() {
 
         binding.modelField.doAfterTextChanged { text ->
             val typed = text?.toString().orEmpty()
-            when (app.settings.effectiveMode) {
+            when (app.settings.mode) {
                 BrainMode.PRIVATE_SERVER -> app.settings.privateServerModel = typed
                 else -> return@doAfterTextChanged
             }
-            app.applyMode(app.settings.effectiveMode)
+            app.applyMode(app.settings.mode)
             showBrain()
         }
 
@@ -279,7 +266,7 @@ class MainActivity : AppCompatActivity() {
             toast(getString(R.string.reset_prompt))
         }
 
-        showEndpointFor(app.settings.effectiveMode)
+        showEndpointFor(app.settings.mode)
         showBrain()
     }
 
@@ -312,7 +299,7 @@ class MainActivity : AppCompatActivity() {
      */
     private fun checkServer() {
         val app = application as TactileSightApp
-        val url = app.settings.urlFor(app.settings.effectiveMode)
+        val url = app.settings.urlFor(app.settings.mode)
 
         binding.status.setText(R.string.checking_server)
         lifecycleScope.launch {
