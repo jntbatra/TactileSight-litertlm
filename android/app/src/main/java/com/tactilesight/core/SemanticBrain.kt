@@ -24,6 +24,20 @@ interface SemanticBrain {
     val name: String
 
     /**
+     * Whether this brain occupies the memory a *second* model would need.
+     *
+     * The one-model-resident rule (ADR-0010) exists because two multi-gigabyte
+     * VLMs at once got the old app OOM-killed six times. A server brain is not
+     * one of those — it is an HTTP client — so evicting four gigabytes of
+     * mapped weights to make room for a socket buys nothing and costs a
+     * multi-second reload on the way back.
+     *
+     * So the rule is really: never hold two of *these*. This flag is how the
+     * app tells the difference.
+     */
+    val holdsModel: Boolean get() = false
+
+    /**
      * Get the model into memory, and say whether it made it.
      *
      * Exists because "ready" was a lie. The screen reported

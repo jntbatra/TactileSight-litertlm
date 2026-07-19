@@ -536,6 +536,11 @@ class MainActivity : AppCompatActivity() {
                     computeUnit = ComputeUnitValue.NPU,
                 )
                 try {
+                    // Two multi-gigabyte bundles must never be resident at
+                    // once, so the parked local brain is genuinely released
+                    // here - this hook is the one case the one-model rule was
+                    // written for.
+                    app.releaseLocalBrain()
                     app.switchBrain(brain)
                     for (id in sceneIds) {
                         val answer = brain.describe(browsable.load(id))
@@ -963,7 +968,9 @@ class MainActivity : AppCompatActivity() {
                 computeUnit = computeUnit,
             )
             try {
-                // Replace the resident brain so we never hold two models.
+                // Replace the resident brain so we never hold two models -
+                // including the parked local one, which is otherwise kept.
+                app.releaseLocalBrain()
                 app.switchBrain(brain)
                 val browsable = frames as BrowsableFrameSource
                 val frame = browsable.load(browsable.sceneIds.first())

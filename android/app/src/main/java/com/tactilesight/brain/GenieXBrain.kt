@@ -79,6 +79,9 @@ class GenieXBrain(
 
     override val name: String = "GenieX (${this.runtime.value}/${this.computeUnit.value})"
 
+    /** Gigabytes of mapped weights — the thing the one-model rule is about. */
+    override val holdsModel: Boolean = true
+
     private val loadLock = Mutex()
 
     @Volatile

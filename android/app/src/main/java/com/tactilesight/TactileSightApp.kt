@@ -96,6 +96,23 @@ class TactileSightApp : Application() {
     }
 
     /**
+     * The one on-device brain, built once and never rebuilt.
+     *
+     * Switching to the private server used to *close* this — four gigabytes of
+     * mapped weights evicted to make room for an HTTP client, and a 7 s reload
+     * (or a wedged DSP) waiting on the way back. The one-model-resident rule
+     * it was obeying is about never holding two **models** at once; a server
+     * brain is not one. So the local brain is parked, not released, and coming
+     * back to it is instant.
+     *
+     * Released only in [releaseLocalBrain] — when the engine or the staged
+     * model itself changes, which is the case the rule was actually written
+     * for.
+     */
+    @Volatile
+    private var localBrain: SemanticBrain? = null
+
+    /**
      * Switch to [mode], releasing whatever model was resident.
      *
      * There is no privacy re-resolution any more: with the cloud tier gone the
@@ -135,7 +152,10 @@ class TactileSightApp : Application() {
      * surfaces as a spoken fallback rather than a crash at launch.
      */
     private fun brainFor(mode: BrainMode): SemanticBrain = when (mode) {
-        BrainMode.ON_DEVICE_NPU -> onDeviceBrain(ModelStore.Engine.GENIEX)
+        // Built at most once per process. Reused across every switch to the
+        // server and back, so the model is mapped exactly one time.
+        BrainMode.ON_DEVICE_NPU -> localBrain
+            ?: onDeviceBrain(ModelStore.Engine.GENIEX).also { localBrain = it }
 
         // Our own machine. Two kinds of server land here and they speak
         // different wires, so the Check button probes and remembers which:
@@ -212,7 +232,34 @@ class TactileSightApp : Application() {
             // state was. Leaving READY here is how the screen came to claim a
             // model was loaded that had never been touched.
             modelState = ModelState.LOADING
-            previous.close()
+            // The local brain is parked, not closed: it is the only thing here
+            // that owns gigabytes, and dropping it to talk to a server means
+            // paying to map it all over again the moment the network wobbles
+            // and you switch back.
+            if (previous === localBrain) {
+                Log.i(TAG, "parking ${previous.name} — model stays resident")
+            } else {
+                previous.close()
+            }
+        }
+    }
+
+    /**
+     * Actually release the on-device model.
+     *
+     * The one place the parked brain dies. Not called on a mode switch — that
+     * is the whole point — but kept because a genuine engine or model change
+     * has to be able to reclaim the memory, and the dev comparison hook loads
+     * bundles in turn and must never hold two at once.
+     */
+    fun releaseLocalBrain() {
+        synchronized(brainLock) {
+            val parked = localBrain ?: return
+            localBrain = null
+            if (parked !== brain) {
+                parked.close()
+                Log.i(TAG, "released the parked ${parked.name}")
+            }
         }
     }
 
