@@ -132,6 +132,26 @@ object VlmPrompt {
             "shows. Never describe the people or objects in it as if they were really there. " +
             "Answer in English."
 
+    /**
+     * Names the dominant thing in each direction, and nothing else.
+     *
+     * **A separate call, not extra clauses on [describe].** Asking for the
+     * structured line inside the description prompt was tried and measured: the
+     * model answered "in front of you, to your left, and to your right, there
+     * is nothing" on a room full of people, and on the next scene emitted the
+     * raw line as its spoken sentence. A 4B model given two jobs does neither.
+     *
+     * Two calls cost ~330 ms against a press that spends ~20 s in speech, so
+     * the second call is free in every sense that matters — and it cannot
+     * damage the description, because the description has already been made.
+     */
+    fun nameDirections(): String =
+        "Look at the image. Name the single most important thing in each direction for " +
+            "someone walking: a wall, doorway, stairs, corridor, furniture or people all count. " +
+            "Answer with one line and nothing else, exactly in this form: " +
+            "AHEAD=<thing>; LEFT=<thing>; RIGHT=<thing>. " +
+            "Use one or two words for each, or NONE if there is nothing there."
+
     fun forRequest(question: String?): String =
         if (question.isNullOrBlank()) describe() else query(question)
 

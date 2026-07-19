@@ -1,6 +1,7 @@
 package com.tactilesight.core
 
 import android.util.Log
+import com.tactilesight.frame.DirectionNames
 import com.tactilesight.frame.DistanceSpeech
 import com.tactilesight.frame.ObjectDetector
 import com.tactilesight.frame.ObjectDistance
@@ -115,11 +116,18 @@ class Orchestrator(
 
             // A blank answer is as dead as a crash — models do return empty
             // strings — so it degrades the same way.
-            val described = current.describe(frame, question, describingAPicture).spoken.ifBlank {
+            val raw = current.describe(frame, question, describingAPicture).spoken.ifBlank {
                 Log.w(TAG, "${current.name} returned a blank answer")
                 FALLBACK
             }
-            withMeasuredDistance(frame, measured, described)
+            // A second, separate pass names what is in each direction, so a
+            // measured distance can carry a noun the detector cannot supply.
+            // Asked after the description exists, so it cannot spoil it, and
+            // skipped entirely when the brain declines (the default).
+            val named = current.nameDirections(frame)
+                ?.let { DirectionNames.parse(it).copy(description = raw) }
+                ?: DirectionNames.parse(raw)
+            withMeasuredDistance(frame, measured, named)
         } catch (e: Exception) {
             Log.w(TAG, "press degraded to fallback", e)
             FALLBACK
@@ -156,11 +164,12 @@ class Orchestrator(
     private fun withMeasuredDistance(
         frame: Frame,
         measured: List<ObjectDistance.Measured>,
-        described: String,
+        named: DirectionNames.Named,
     ): String {
+        val described = named.description
         if (described == FALLBACK) return described
         return try {
-            val clause = distanceClauseFor(frame, measured)
+            val clause = distanceClauseFor(frame, measured, named)
             if (clause.isBlank()) described else "$clause $described"
         } catch (e: Exception) {
             Log.w(TAG, "distance unavailable — speaking the description alone", e)
@@ -178,7 +187,11 @@ class Orchestrator(
      * consolation - COCO has no class for a wall, a doorway or a stair, and
      * those are most of what a corridor contains.
      */
-    private fun distanceClauseFor(frame: Frame, measured: List<ObjectDistance.Measured>): String {
+    private fun distanceClauseFor(
+        frame: Frame,
+        measured: List<ObjectDistance.Measured>,
+        named: DirectionNames.Named,
+    ): String {
         if (measured.isNotEmpty()) {
             val named = DistanceSpeech.clauseForObjects(measured)
             val unmeasured = measured.count { !it.isKnown }
@@ -190,7 +203,10 @@ class Orchestrator(
             }
             if (named.isNotBlank()) return named
         }
-        return DistanceSpeech.clauseFor(RegionDistance.measure(frame.depthMillimetres))
+        // Fall back to per-direction, but carrying the VLM's own noun where it
+        // gave one: "a doorway four metres ahead" rather than "four metres
+        // ahead". COCO cannot name a doorway; the VLM can.
+        return DistanceSpeech.clauseForNamed(RegionDistance.measure(frame.depthMillimetres), named)
     }
 
     companion object {

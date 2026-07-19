@@ -40,6 +40,17 @@ interface SemanticBrain {
         surfaceIsFlat: Boolean = false,
     ): Answer
 
+    /**
+     * Name what is in each direction, for attaching a measured distance to a
+     * noun the detector cannot supply — a wall, a doorway, a stair.
+     *
+     * Returns null when this brain cannot or will not do it. That is the
+     * default: the feature must never be the reason a press fails, and a tier
+     * that answers slowly over a venue network should not pay for a second
+     * round trip.
+     */
+    suspend fun nameDirections(frame: Frame): String? = null
+
     /** Release the model. Called only on engine/model switch. */
     fun close() {}
 }

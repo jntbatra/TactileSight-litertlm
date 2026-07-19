@@ -106,6 +106,18 @@ class GenieXBrain(
     }
 
     /**
+     * Only the on-device tier does this. At ~330 ms a second pass is free
+     * against a press that spends 20 s in speech; over a network it would not
+     * be, which is why the seam defaults to null rather than to this.
+     */
+    override suspend fun nameDirections(frame: Frame): String? = try {
+        describeWith(frame, VlmPrompt.nameDirections()).spoken
+    } catch (e: Exception) {
+        Log.w(TAG, "direction naming failed — falling back to unnamed distances", e)
+        null
+    }
+
+    /**
      * Describe [frame] with an explicit [prompt], bypassing [VlmPrompt].
      *
      * Exists so prompt wording can be **measured rather than argued about**:

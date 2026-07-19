@@ -100,13 +100,69 @@ object DistanceSpeech {
         else -> "in front of you"
     }
 
-    /** "a person", "an umbrella" — spoken English, not a label dump. */
-    private fun article(label: String): String =
-        if (label.firstOrNull()?.lowercaseChar() in listOf('a', 'e', 'i', 'o', 'u')) {
-            "an $label"
-        } else {
-            "a $label"
+    /**
+     * "a person", "an umbrella", "people" — spoken English, not a label dump.
+     *
+     * Plurals and mass nouns take no article. Without this the device said
+     * **"a people about four metres ahead"**, which is the kind of small
+     * wrongness that makes a careful listener stop trusting the rest of the
+     * sentence.
+     */
+    private fun article(label: String): String = when {
+        label in NO_ARTICLE -> label
+        // "stairs", "people", "doors" - a trailing s is plural often enough,
+        // and the words it gets wrong ("glass") are not ones we name.
+        label.endsWith("s") -> label
+        label.firstOrNull()?.lowercaseChar() in listOf('a', 'e', 'i', 'o', 'u') -> "an $label"
+        else -> "a $label"
+    }
+
+    /** Mass nouns and plurals that do not end in s. */
+    private val NO_ARTICLE = setOf(
+        "people", "furniture", "seating", "flooring", "glass", "signage", "luggage",
+    )
+
+    /**
+     * Per-direction distance with the VLM's own noun attached: *"a doorway
+     * about four metres ahead, a wall one and a half metres to your left."*
+     *
+     * This is the shape the answer was always meant to have. Depth knows how
+     * far and cannot know what; the VLM knows what and must never guess how far
+     * (ADR-0013). Joining them by direction is the cheapest honest way to say
+     * both — and it names the things a detector cannot: walls, doorways,
+     * stairs, corridors.
+     *
+     * A direction is spoken only when **both** halves exist. No name means the
+     * per-direction wording is used instead of inventing one; no distance means
+     * silence, and the description still names the thing without a number.
+     */
+    fun clauseForNamed(
+        readings: List<RegionDistance.Reading>,
+        names: DirectionNames.Named,
+    ): String {
+        val ahead = readings.firstOrNull { it.region == RegionDistance.Region.AHEAD }
+        val closeSide = readings
+            .filter { it.region != RegionDistance.Region.AHEAD && it.isKnown }
+            .filter { it.millimetres!! <= CLOSE_ENOUGH_MM }
+            .filter { ahead?.millimetres == null || it.millimetres!! < ahead.millimetres }
+            .minByOrNull { it.millimetres!! }
+
+        val parts = buildList {
+            listOfNotNull(ahead?.takeIf { it.isKnown }, closeSide).forEach { reading ->
+                val name = names.forRegion(reading.region)
+                val where = if (reading.region == RegionDistance.Region.AHEAD) {
+                    "ahead"
+                } else {
+                    reading.region.spoken
+                }
+                add(
+                    if (name == null) "${phrase(reading.millimetres!!)} $where"
+                    else "${article(name)} ${phrase(reading.millimetres!!)} $where",
+                )
+            }
         }
+        return if (parts.isEmpty()) "" else parts.joinToString(", ") + "."
+    }
 
     /** Spoken form of a distance. Words, not digits — this is read aloud. */
     private fun phrase(millimetres: Int): String {
