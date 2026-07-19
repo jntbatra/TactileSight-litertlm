@@ -27,7 +27,7 @@ import com.tactilesight.core.DepthMap
  * third. What this measures honestly is **the nearest surface in a direction**,
  * which is what a walking user needs first anyway.
  *
- * ### Why the fifth percentile, never the minimum
+ * ### Why the tenth percentile, never the minimum
  *
  * ADR-0013 makes this a mandatory safeguard: a single speckle or edge pixel
  * reading 400 mm would turn "a clear corridor" into "something at arm's
