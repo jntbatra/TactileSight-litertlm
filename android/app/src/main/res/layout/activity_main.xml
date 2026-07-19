@@ -84,6 +84,24 @@
             android:textSize="12sp" />
     </LinearLayout>
 
+    <!-- Where the frame goes, in both modes. Two destinations, so a switch
+         rather than a dropdown - a dropdown makes you tap twice and read a
+         list to answer a yes/no question.
+
+         Two words on its face and the whole sentence on its content
+         description: a sighted user needs a glance, and a blind one hears
+         "On this phone. The frame stays on this phone." either way. The lock
+         and the cloud are readable before the words are. -->
+    <androidx.appcompat.widget.SwitchCompat
+        android:id="@+id/brainSwitch"
+        android:layout_width="wrap_content"
+        android:layout_height="48dp"
+        android:layout_marginBottom="12dp"
+        android:gravity="center_vertical"
+        android:text="@string/brain_on_device"
+        android:textColor="@color/on_surface"
+        android:textSize="15sp" />
+
     <!-- Everything a user must never have to see or understand: which engine
          answers, where it lives, and what it is asked. One container so the
          switch is a single visibility change and a control cannot be added
@@ -120,28 +138,6 @@
          it is written for cannot read "On-device" off a spinner, and to
          everyone else it is a menu of things that can only go wrong. The
          privacy statement belongs in what the app *says*, not in a control. -->
-    <TextView
-        android:id="@+id/brainLabel"
-        style="@style/TextAppearance.TactileSight.Label"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:labelFor="@id/brainSwitch"
-        android:text="@string/label_brain" />
-
-    <!-- A switch, not a spinner: there are exactly two destinations, and a
-         dropdown makes you tap twice and read a list to answer a yes/no
-         question. Labelled with where the frame goes rather than with an
-         engine name, because that is the part that actually matters. -->
-    <androidx.appcompat.widget.SwitchCompat
-        android:id="@+id/brainSwitch"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:layout_marginBottom="12dp"
-        android:minHeight="48dp"
-        android:text="@string/brain_on_device"
-        android:textColor="@color/on_surface"
-        android:textSize="15sp" />
 
     <!-- Only shown for a server mode: on-device has no address. -->
     <EditText

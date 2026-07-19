@@ -803,6 +803,10 @@ class MainActivity : AppCompatActivity() {
             if (mode.sendsImageryOffDevice) R.string.brain_private_server
             else R.string.brain_on_device,
         )
+        binding.brainSwitch.contentDescription = getString(
+            if (mode.sendsImageryOffDevice) R.string.brain_private_server_content_description
+            else R.string.brain_on_device_content_description,
+        )
     }
 
     /**

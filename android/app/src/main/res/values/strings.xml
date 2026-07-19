@@ -14,10 +14,13 @@
     <string name="globe">🌐</string>
     <string name="language_content_description">Speaking %s. Tap to choose your language by voice.</string>
 
-    <!-- The switch says where the frame goes, not which engine runs. That is
-         the part with consequences. -->
-    <string name="brain_on_device">On-device · the frame stays on this phone</string>
-    <string name="brain_private_server">Private server · the frame leaves this phone</string>
+    <!-- Two words on the face, the whole sentence on the content description.
+         The switch says where the frame *goes*, not which engine runs — that
+         is the part with consequences. -->
+    <string name="brain_on_device">🔒 On phone</string>
+    <string name="brain_private_server">☁️ Private server</string>
+    <string name="brain_on_device_content_description">Describing on this phone. The frame does not leave it. Switch on to use the private server.</string>
+    <string name="brain_private_server_content_description">Describing on the private server. The frame leaves this phone. Switch off to describe on the phone.</string>
 
     <string name="label_camera">Camera</string>
     <string name="camera_no_distance">Phone camera — I can describe what is around you, but not measure how far away it is.</string>
