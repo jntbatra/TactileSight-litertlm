@@ -36,7 +36,11 @@ import com.tactilesight.frame.DepthCoverage
 import com.tactilesight.frame.DepthRenderer
 import com.tactilesight.frame.FramePage
 import com.tactilesight.frame.FramePagerAdapter
+import android.content.Intent
+import android.nfc.NfcAdapter
+import android.nfc.Tag
 import com.tactilesight.frame.FrameSourceKind
+import com.tactilesight.nfc.BandTag
 import com.tactilesight.frame.ObjectDetector
 import com.tactilesight.speech.MicRecorder
 import com.tactilesight.speech.SarvamAsr
@@ -69,6 +73,9 @@ class MainActivity : AppCompatActivity() {
 
     /** The scene captured at press-down, answered about at release (#9). */
     private var heldFrame: Frame? = null
+
+    /** True only between pressing "write tag" and a tag arriving. */
+    private var armedForTagWrite = false
     private val pages = FramePagerAdapter()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -102,6 +109,15 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.describeButton.setOnClickListener { onPress() }
+        setUpTagWriting()
+
+        // Arriving by tap is worth announcing: the user cannot see that the
+        // app opened, and silence after touching the band is indistinguishable
+        // from nothing having happened.
+        if (BandTag.launchedByTap(intent)) {
+            Log.i(TAG, "launched by NFC tap")
+            lifecycleScope.launch { orchestrator.speakReady() }
+        }
         setUpAskButton()
 
         // Dev affordance, not a feature: adb shell am start -n <pkg>/.MainActivity --ez sweep true
@@ -154,6 +170,48 @@ class MainActivity : AppCompatActivity() {
      * microphone records the device answering itself, and the transcript comes
      * back as our own last sentence.
      */
+    /**
+     * Writing a tag is a provisioning action, not a user control - a sighted
+     * teammate does it once per band. Foreground dispatch is only enabled while
+     * armed, because a blank tag matches no intent filter and would otherwise
+     * never reach us.
+     */
+    private fun setUpTagWriting() {
+        binding.writeTagButton.setOnClickListener {
+            if (BandTag.adapterFor(this) == null) {
+                binding.status.setText(R.string.tag_no_nfc)
+                return@setOnClickListener
+            }
+            armedForTagWrite = true
+            BandTag.startWriting(this)
+            binding.status.setText(R.string.tag_hold)
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (!armedForTagWrite) return
+        val tag: Tag? = if (android.os.Build.VERSION.SDK_INT >= 33) {
+            intent.getParcelableExtra(NfcAdapter.EXTRA_TAG, Tag::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra(NfcAdapter.EXTRA_TAG)
+        }
+        val outcome = BandTag.write(tag)
+        armedForTagWrite = false
+        BandTag.stopWriting(this)
+        binding.status.text = outcome
+        Log.i(TAG, "tag write: $outcome")
+    }
+
+    override fun onPause() {
+        super.onPause()
+        if (armedForTagWrite) {
+            armedForTagWrite = false
+            BandTag.stopWriting(this)
+        }
+    }
+
     private fun setUpAskButton() {
         binding.askButton.setOnTouchListener { view, event ->
             when (event.action) {

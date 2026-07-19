@@ -15,6 +15,10 @@
          than at launch, so the prompt arrives when its purpose is obvious. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
+    <!-- Tap-to-launch, and writing the tag that does it. -->
+    <uses-permission android:name="android.permission.NFC" />
+    <uses-feature android:name="android.hardware.nfc" android:required="false" />
+
     <application
         android:usesCleartextTraffic="true"
         android:name=".TactileSightApp"
@@ -29,6 +33,26 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!--
+              Tap the phone to the band and the app opens (#10).
+
+              A custom MIME type rather than an Android Application Record:
+              an AAR launches the app when it is installed and otherwise
+              sends the user to the Play Store, which is no use for a
+              sideloaded build. A MIME record we own is matched only by us,
+              and does nothing at all when we are absent - which is the
+              honest behaviour for a tag stuck to a piece of hardware.
+
+              Why this matters for a blind user: it removes the step that
+              needs sight. Finding an icon on a home screen is the one part
+              of "open the app" that a screen cannot help with.
+            -->
+            <intent-filter>
+                <action android:name="android.nfc.action.NDEF_DISCOVERED" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/vnd.tactilesight.band" />
             </intent-filter>
         </activity>
     </application>

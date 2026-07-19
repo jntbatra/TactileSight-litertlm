@@ -20,6 +20,10 @@
     <string name="describe">Describe</string>
     <string name="describe_content_description">Describe what is in front of me</string>
     <string name="ask">Hold to ask</string>
+    <string name="write_tag">Write NFC tag</string>
+    <string name="write_tag_content_description">Write an NFC tag that opens this app</string>
+    <string name="tag_hold">Hold a blank NFC tag against the back of the phone.</string>
+    <string name="tag_no_nfc">This phone has no NFC.</string>
     <string name="ask_content_description">Hold this button and ask a question about the scene</string>
     <string name="status_listening">Listening… release to ask</string>
     <string name="status_no_mic">Microphone permission is needed to ask a question.</string>

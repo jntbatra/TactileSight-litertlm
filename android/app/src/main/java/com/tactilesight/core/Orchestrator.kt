@@ -68,6 +68,25 @@ class Orchestrator(
     }
 
     /**
+     * Say the device is awake and listening.
+     *
+     * Spoken on an NFC tap because the user cannot see that anything happened.
+     * Touching the band and hearing nothing is indistinguishable from touching
+     * it and it not working — and the natural response to that is to tap again,
+     * which is how a device teaches someone to distrust it.
+     *
+     * Failure here is swallowed: this is an acknowledgement, not an answer, and
+     * a broken greeting must not stop the app from opening.
+     */
+    suspend fun speakReady() {
+        try {
+            speech.speak(READY, language())
+        } catch (e: Exception) {
+            Log.w(TAG, "could not speak the greeting", e)
+        }
+    }
+
+    /**
      * Capture the scene the user is asking about, at the moment they press
      * down (#9, ADR-0011).
      *
@@ -214,5 +233,8 @@ class Orchestrator(
 
         /** Spoken when the pipeline fails. Honest, not reassuring. */
         const val FALLBACK = "Sorry, I could not see that. Please try again."
+
+        /** Short on purpose — it is heard before every single use. */
+        const val READY = "TactileSight is ready."
     }
 }
