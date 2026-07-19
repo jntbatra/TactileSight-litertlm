@@ -55,13 +55,21 @@ class SpokenSetup(
      * button.
      */
     suspend fun run(record: suspend () -> ByteArray?): Outcome {
-        // Both prompts, one after the other. Sarvam speaks one language per
-        // call, so this is genuinely two utterances.
+        // Both prompts, fetched together and played back to back. Sarvam
+        // speaks one language per call, so this is genuinely two utterances -
+        // but speaking them with two sequential calls put a whole network round
+        // trip of silence between them, right where the user is waiting to be
+        // told what to do.
+        //
         // translate = false: these are written in the language they are spoken
         // in. Translating "भाषा चुनें।" as though it were English produced
         // "Choose a language" - spoken in a Hindi voice, in English words.
-        speech.speak(PROMPT_ENGLISH, Language.ENGLISH, translate = false)
-        speech.speak(PROMPT_HINDI, Language.HINDI, translate = false)
+        speech.speakAll(
+            listOf(
+                SpeechIO.Utterance(PROMPT_ENGLISH, Language.ENGLISH, translate = false),
+                SpeechIO.Utterance(PROMPT_HINDI, Language.HINDI, translate = false),
+            ),
+        )
 
         val heard = record()?.let { asr.listen(it) }
         if (heard == null) {

@@ -23,6 +23,28 @@ interface SpeechIO {
         language: Language = Language.ENGLISH,
         translate: Boolean = true,
     )
+
+    /**
+     * Speak several utterances back to back, fetching them **concurrently**.
+     *
+     * [speak] is fetch-then-play, so calling it twice puts a whole network
+     * round trip *between* the two utterances — measured as a long, dead gap
+     * between "Choose language." and "भाषा चुनें।", exactly where a user is
+     * waiting to be told what to do.
+     *
+     * Implementations that can synthesise in parallel should. The default is
+     * the honest sequential one, so a tier that cannot gains nothing and breaks
+     * nothing.
+     */
+    suspend fun speakAll(utterances: List<Utterance>) {
+        utterances.forEach { speak(it.text, it.language, it.translate) }
+    }
+
+    data class Utterance(
+        val text: String,
+        val language: Language = Language.ENGLISH,
+        val translate: Boolean = true,
+    )
 }
 
 /**

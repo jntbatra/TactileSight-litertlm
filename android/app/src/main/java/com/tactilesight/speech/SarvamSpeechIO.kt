@@ -7,6 +7,8 @@ import com.tactilesight.BuildConfig
 import com.tactilesight.core.Language
 import com.tactilesight.core.SpeechIO
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -39,6 +41,47 @@ class SarvamSpeechIO(
             synthesise(if (translate) translated(text, language) else text, language)
         }
         play(wav)
+    }
+
+    /**
+     * Fetch every utterance at once, then play them in order.
+     *
+     * The gap this removes is not small: each utterance costs a translate call
+     * plus a synthesis call, and sequential [speak] spends both of those in
+     * silence after the previous audio has already finished. Fetching in
+     * parallel means the next clip is in hand before the current one ends.
+     *
+     * Playback stays strictly ordered — "Choose language." must precede
+     * "भाषा चुनें।", and overlapping speech is unintelligible.
+     */
+    override suspend fun speakAll(utterances: List<SpeechIO.Utterance>) {
+        if (utterances.isEmpty()) return
+        require(apiKey.isNotBlank()) {
+            "Sarvam API key missing — set sarvam.api.key in android/local.properties"
+        }
+
+        val clips = withContext(Dispatchers.IO) {
+            utterances.map { utterance ->
+                async {
+                    runCatching {
+                        val text = if (utterance.translate) {
+                            translated(utterance.text, utterance.language)
+                        } else {
+                            utterance.text
+                        }
+                        synthesise(text, utterance.language)
+                    }.getOrElse {
+                        // One failed clip must not silence the rest: in setup
+                        // that would mean a user hears the prompt in a language
+                        // they do not read and nothing in the one they do.
+                        Log.w(TAG, "could not synthesise '${utterance.text}'", it)
+                        null
+                    }
+                }
+            }.awaitAll()
+        }
+
+        clips.filterNotNull().forEach { play(it) }
     }
 
     /**
