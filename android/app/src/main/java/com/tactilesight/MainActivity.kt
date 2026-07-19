@@ -272,7 +272,14 @@ class MainActivity : AppCompatActivity() {
                 app.settings.isConfigured = true
                 setUpLanguagePicker()
                 binding.status.text = outcome.spokenBack
-                speech.speak(outcome.spokenBack, app.settings.language)
+                // translate = false when we recognised the language: the
+                // confirmation is already authored in it. A failure message
+                // stays English, because we do not know what else they read.
+                speech.speak(
+                    outcome.spokenBack,
+                    app.settings.language,
+                    translate = outcome.language == null,
+                )
             } catch (e: Exception) {
                 Log.w(TAG, "spoken setup failed", e)
                 app.settings.isConfigured = true

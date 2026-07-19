@@ -84,8 +84,19 @@ class SpokenSetup(
         }
 
         Log.i(TAG, "language set to ${chosen.sarvamCode} from '${heard.transcript}'")
-        return Outcome(chosen, CONFIRMED)
+        return Outcome(chosen, confirmationFor(chosen))
     }
+
+    /**
+     * "Language chosen", in the language just chosen.
+     *
+     * Authored rather than translated at runtime. Translating the confirmation
+     * would cost another round trip at the one moment the user is waiting to
+     * find out whether the device understood them — and it would put a machine
+     * translation in the first sentence they ever hear in their own language.
+     */
+    private fun confirmationFor(language: Language): String =
+        CONFIRMATIONS[language] ?: CONFIRMED
 
     /**
      * Named language wins over detected one.
@@ -140,7 +151,35 @@ class SpokenSetup(
         /** Spoken in English — we do not yet know what else they understand. */
         const val NOT_HEARD = "I did not hear you. Staying in English for now."
         const val NOT_UNDERSTOOD = "I did not catch that language. Staying in English for now."
-        const val CONFIRMED = "Language set."
+        /** English, and the fallback for a language with no authored string. */
+        const val CONFIRMED = "Language chosen."
+
+        /**
+         * "Language chosen", per language.
+         *
+         * Produced by Sarvam's own `sarvam-translate:v1` rather than written by
+         * hand — eleven scripts is exactly the place where a confident guess
+         * ships a typo that nobody on the team can read.
+         *
+         * ⚠️ **Telugu is the weak one.** Sarvam returned `ఎంచుకున్న భాష.`, which
+         * is the noun phrase "chosen language" rather than the sentence
+         * "Language chosen." It is kept because it is intelligible and because
+         * inventing Telugu we cannot check would be worse — but it wants a
+         * native speaker's eye before this is called finished.
+         */
+        val CONFIRMATIONS: Map<Language, String> = mapOf(
+            Language.ENGLISH to CONFIRMED,
+            Language.HINDI to "भाषा चुनी गई।",
+            Language.PUNJABI to "ਭਾਸ਼ਾ ਚੁਣੀ ਗਈ।",
+            Language.BENGALI to "ভাষা নির্বাচন করা হয়েছে।",
+            Language.GUJARATI to "ભાષા પસંદ કરેલ છે.",
+            Language.KANNADA to "ಭಾಷೆ ಆಯ್ಕೆ ಮಾಡಲಾಗಿದೆ.",
+            Language.MALAYALAM to "ഭാഷ തിരഞ്ഞെടുത്തു.",
+            Language.MARATHI to "भाषा निवडली.",
+            Language.ODIA to "ଭାଷା ଚୟନ କରାଗଲା।",
+            Language.TAMIL to "மொழி தேர்ந்தெடுக்கப்பட்டது.",
+            Language.TELUGU to "ఎంచుకున్న భాష.",
+        )
 
         /**
          * What people call these languages, beyond the enum's spelling.
