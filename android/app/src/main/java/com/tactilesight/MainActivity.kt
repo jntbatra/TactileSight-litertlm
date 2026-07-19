@@ -4,8 +4,12 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.os.Bundle
 import android.util.Log
+import android.view.HapticFeedbackConstants
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.widget.AdapterView
@@ -31,6 +35,7 @@ import com.tactilesight.core.FrameSource
 import com.tactilesight.core.Language
 import com.tactilesight.core.Orchestrator
 import com.tactilesight.databinding.ActivityMainBinding
+import com.tactilesight.frame.BandCaptureSource
 import com.tactilesight.frame.BundledCaptureSource
 import com.tactilesight.frame.DepthCoverage
 import com.tactilesight.frame.DepthRenderer
@@ -57,8 +62,10 @@ import java.io.File
  *
  * There is no phone camera in this app — frames are real Astra Pro Plus
  * captures. The band has three physical buttons (ADR-0011); until the band is
- * wired, this screen carries button 1 only. Buttons 2 and 3 arrive with #17,
- * the engine picker with #7.
+ * wired, this screen carries button 1 only — on glass, and on the phone's
+ * volume-up key so the phone can stay in a pocket (see [onKeyDown], and its
+ * foreground-only limitation). Buttons 2 and 3 arrive with #17, the engine
+ * picker with #7.
  *
  * The screen depends on [FrameSource] and nothing narrower. Browsing is offered
  * only when the source says it is browsable, so the live WebRTC source (#19)
@@ -74,6 +81,15 @@ class MainActivity : AppCompatActivity() {
     /** The band's captures. Kept because the dev scene picker browses them. */
     private lateinit var bundled: BundledCaptureSource
     private val phoneCamera by lazy { PhoneCameraSource(this, this) }
+
+    /**
+     * The live band. The address is read per capture rather than bound here, so
+     * correcting it after a DHCP move takes effect on the next press instead of
+     * the next launch.
+     */
+    private val band by lazy {
+        BandCaptureSource { (application as TactileSightApp).settings.bandAddress }
+    }
     private lateinit var orchestrator: Orchestrator
     private val recorder = MicRecorder()
     private val detector by lazy { ObjectDetector(applicationContext) }
@@ -89,6 +105,14 @@ class MainActivity : AppCompatActivity() {
 
     /** When the action button went down — tap or hold is decided at release. */
     private var pressedAtMillis = 0L
+
+    /**
+     * True between a press-down and its release, from whichever input started
+     * it. Two inputs now drive button 1 (glass and volume-up), and without this
+     * a stray key-up with no matching down would finish a press that never
+     * began — or a second down would discard the first one's captured frame.
+     */
+    private var pressIsDown = false
 
     /** True once a press has put an answer on screen, so warm-up cannot erase it. */
     private var hasAnswered = false
@@ -332,18 +356,116 @@ class MainActivity : AppCompatActivity() {
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
                     view.performClick()
-                    pressedAtMillis = System.currentTimeMillis()
-                    startAsking()
+                    pressDown()
                     true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    val heldFor = System.currentTimeMillis() - pressedAtMillis
-                    if (heldFor < HOLD_THRESHOLD_MS) tapToDescribe() else finishAsking()
+                    pressUp()
                     true
                 }
                 else -> false
             }
         }
+    }
+
+    /**
+     * Button 1 goes down, whatever "button 1" happens to be today.
+     *
+     * The one implementation behind both the on-screen button and the volume-up
+     * key. Deliberately not duplicated per input: this gesture pair is invisible
+     * behaviour — a blind user cannot see a second copy of it drifting — and the
+     * band's real buttons will land on these two calls too.
+     *
+     * Re-entrant presses are ignored rather than stacked. The touchscreen and a
+     * hardware key can both be down at once, and a second down would throw away
+     * the frame captured by the first and restart a recording mid-question.
+     *
+     * A press arriving while the *previous* one is still being answered is
+     * dropped here too, and for a harder reason: see [Orchestrator.BUSY]. It is
+     * caught at press-down rather than at release so the drop costs nothing —
+     * no capture, no mic, no transcription round trip for an answer that would
+     * be thrown away — and so the user is told immediately rather than after
+     * they let go.
+     */
+    private fun pressDown() {
+        if (pressIsDown) return
+        if (orchestrator.isBusy) {
+            signalBusy()
+            return
+        }
+        pressIsDown = true
+        pressedAtMillis = System.currentTimeMillis()
+        startAsking()
+    }
+
+    /**
+     * "Heard you, still working" — without saying it.
+     *
+     * A tick and a short tone, not speech. The user is either listening to the
+     * previous answer, in which case words would talk over the thing they
+     * pressed for, or waiting on a silent model, in which case they need the
+     * reply *now* and a Sarvam round trip would arrive after it. Both are
+     * served by a sound that carries no language.
+     *
+     * Never allowed to break a press: a device with no vibrator, or a tone
+     * generator the audio HAL refuses, is a worse thing to crash over than to
+     * skip.
+     */
+    private fun signalBusy() {
+        Log.i(TAG, "press ignored — one is still in flight")
+        binding.status.setText(R.string.status_busy)
+        try {
+            binding.actionButton.performHapticFeedback(HapticFeedbackConstants.REJECT)
+            ToneGenerator(AudioManager.STREAM_MUSIC, BUSY_TONE_VOLUME).apply {
+                startTone(ToneGenerator.TONE_PROP_NACK, BUSY_TONE_MS)
+                // The tone plays asynchronously; releasing immediately cuts it
+                // off, so the generator outlives the call by its own duration.
+                binding.actionButton.postDelayed(::release, BUSY_TONE_MS.toLong() * 2)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "could not signal busy", e)
+        }
+    }
+
+    /** Button 1 comes up: under [HOLD_THRESHOLD_MS] describes, over it asks. */
+    private fun pressUp() {
+        if (!pressIsDown) return
+        pressIsDown = false
+        val heldFor = System.currentTimeMillis() - pressedAtMillis
+        if (heldFor < HOLD_THRESHOLD_MS) tapToDescribe() else finishAsking()
+    }
+
+    /**
+     * Volume-up is band button 1 until the band's own buttons are wired.
+     *
+     * The point is a phone that stays in a pocket: the whole gesture pair has to
+     * be reachable without finding anything on glass. Volume-*down* is left
+     * alone and still changes the volume — the user needs some way to make the
+     * answers louder, and taking both keys would remove it.
+     *
+     * Returning true swallows the key, so the system neither changes the volume
+     * nor flashes the volume slider over the app.
+     *
+     * Only [event]s with `repeatCount == 0` start a press: Android repeats
+     * onKeyDown for as long as a key is held, and acting on the repeats would
+     * turn one hold into a storm of presses.
+     *
+     * **Limitation: this works only while this Activity is foregrounded.** With
+     * the screen off, or another app in front, the volume keys go to the system
+     * and TactileSight never sees them. Reaching the keys from the background
+     * needs a MediaSession or an accessibility service; neither is built.
+     */
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (keyCode != KeyEvent.KEYCODE_VOLUME_UP) return super.onKeyDown(keyCode, event)
+        if (event?.repeatCount == 0) pressDown()
+        return true
+    }
+
+    /** @see onKeyDown — the release half, and the same foreground-only limit. */
+    override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
+        if (keyCode != KeyEvent.KEYCODE_VOLUME_UP) return super.onKeyUp(keyCode, event)
+        pressUp()
+        return true
     }
 
     /**
@@ -360,10 +482,11 @@ class MainActivity : AppCompatActivity() {
             try {
                 // The frame captured at press-down, or a fresh one if that is
                 // still in flight - a tap can outrun the capture.
-                binding.status.text = heldFrame
-                    ?.let { orchestrator.answerAbout(it) }
-                    ?: orchestrator.onPress()
-                hasAnswered = true
+                showAnswer(
+                    heldFrame
+                        ?.let { orchestrator.answerAbout(it) }
+                        ?: orchestrator.onPress(),
+                )
             } catch (e: Exception) {
                 Log.e(TAG, "describe failed", e)
                 binding.status.setText(R.string.status_speech_failed)
@@ -372,10 +495,36 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Put a spoken answer on screen — unless there wasn't one.
+     *
+     * [Orchestrator.BUSY] is a marker, not a sentence, and writing it to the
+     * status line would replace the answer the user is still listening to with
+     * `__busy__`. [pressDown] catches nearly every dropped press before it gets
+     * here; this covers the narrow race where two presses pass the advisory
+     * check and only one takes the lock.
+     */
+    private fun showAnswer(text: String) {
+        if (text == Orchestrator.BUSY) return
+        binding.status.text = text
+        hasAnswered = true
+    }
+
     private fun startAsking() {
         // Capture first: the mic can wait a few milliseconds, the scene cannot.
         heldFrame = null
-        lifecycleScope.launch { heldFrame = orchestrator.captureNow() }
+        lifecycleScope.launch {
+            heldFrame = orchestrator.captureNow()
+            // Render whatever was actually captured.
+            //
+            // Until this line the previews were only ever filled by the scene
+            // picker, which exists solely for browsable sources — so the band
+            // and the phone camera captured fine, described fine, and left the
+            // carousel blank. On a dev screen whose whole job is showing what
+            // the model was given, an empty preview reads as "the camera is
+            // broken" and sent us looking at the band for an app-side gap.
+            heldFrame?.let(::showFrame)
+        }
 
         if (!hasMicPermission()) {
             requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQUEST_MIC)
@@ -405,8 +554,7 @@ class MainActivity : AppCompatActivity() {
             val question = wav?.let { asr.transcribe(it) }
             Log.i(TAG, "asked: ${question ?: "(nothing heard — describing instead)"}")
             try {
-                binding.status.text = orchestrator.answerAbout(heldFrame, question)
-                hasAnswered = true
+                showAnswer(orchestrator.answerAbout(heldFrame, question))
             } catch (e: Exception) {
                 Log.e(TAG, "ask failed", e)
                 binding.status.setText(R.string.status_speech_failed)
@@ -839,6 +987,20 @@ class MainActivity : AppCompatActivity() {
             }
             selectSource(kind)
         }
+
+        // Saved on every keystroke rather than behind a confirm button: the
+        // address is read per capture, so a half-typed IP simply fails the next
+        // press and the finished one works, with nothing to remember to tap.
+        val settings = (application as TactileSightApp).settings
+        binding.bandAddressField.setText(settings.bandAddress)
+        binding.bandAddressField.doAfterTextChanged { settings.bandAddress = it?.toString().orEmpty() }
+        showBandAddress(FrameSourceKind.BUNDLED)
+    }
+
+    /** The address only means anything for the band, so it only shows there. */
+    private fun showBandAddress(kind: FrameSourceKind) {
+        binding.bandAddressField.visibility =
+            if (kind == FrameSourceKind.BAND) View.VISIBLE else View.GONE
     }
 
     /**
@@ -849,16 +1011,15 @@ class MainActivity : AppCompatActivity() {
      * standalone fallback. So entering user mode selects the live source rather
      * than leaving the choice on screen.
      *
-     * Until #19 lands that source does not exist, and this deliberately does
-     * **not** pretend otherwise. It leaves whatever dev mode had selected and
-     * says so in the log, rather than silently dressing bundled captures up as
-     * a live band — which would make a demo look live when it was replaying a
+     * The guard below is kept now that the source exists, because "available"
+     * is still the honest place to switch it off — and falling back silently to
+     * bundled captures would make a demo look live when it was replaying a
      * photograph from yesterday.
      */
     private fun preferLiveBand() {
-        val live = FrameSourceKind.WEBRTC
+        val live = FrameSourceKind.BAND
         if (!live.available) {
-            Log.i(TAG, "user mode: ${live.displayName} not built yet — staying on the selected source")
+            Log.i(TAG, "user mode: ${live.displayName} unavailable — staying on the selected source")
             return
         }
         binding.cameraSpinner.setSelection(live.ordinal)
@@ -898,6 +1059,17 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
+            FrameSourceKind.BAND -> {
+                frames = band
+                phoneCamera.stop()
+                showBrain()
+                // Nothing is probed here on purpose. A reachability check would
+                // only tell the user about the network as it was a moment ago,
+                // and the press already degrades to speech if the band is gone
+                // — see BandCaptureSource and Orchestrator.onPress.
+                Log.i(TAG, "band source at ${(application as TactileSightApp).settings.bandAddress}")
+            }
+
             else -> {
                 frames = bundled
                 phoneCamera.stop()
@@ -905,6 +1077,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         setUpScenePicker()
+        showBandAddress(kind)
         Log.i(TAG, "frame source = $kind")
     }
 
@@ -1140,6 +1313,16 @@ class MainActivity : AppCompatActivity() {
 
         /** Long enough to say a language, short enough not to feel stuck. */
         const val SETUP_LISTEN_MS = 4_000L
+
+        /**
+         * Short enough to read as a tick rather than an error, long enough to
+         * be heard over a room. It plays *under* an answer that is already
+         * being spoken, so it must not compete with it.
+         */
+        const val BUSY_TONE_MS = 120
+
+        /** Quiet on purpose: an acknowledgement, not an alarm. */
+        const val BUSY_TONE_VOLUME = 60
 
         /** Any of these means a test is driving; leave the microphone alone. */
         val HOOK_EXTRAS = setOf(EXTRA_SWEEP, EXTRA_HEXAGON, EXTRA_COMPARE, EXTRA_PRESS, EXTRA_WRITE_TAG)

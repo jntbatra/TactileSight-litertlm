@@ -130,7 +130,23 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
-        android:layout_marginBottom="20dp" />
+        android:layout_marginBottom="8dp" />
+
+    <!-- Only shown for the band: where it is on the network. The board takes
+         its address from DHCP, so this moves between venues and cannot be a
+         constant — see Settings.bandAddress. -->
+    <EditText
+        android:id="@+id/bandAddressField"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="20dp"
+        android:hint="@string/hint_band_address"
+        android:importantForAutofill="no"
+        android:inputType="text"
+        android:maxLines="1"
+        android:textColor="@color/on_surface"
+        android:textColorHint="@color/on_surface_muted"
+        android:textSize="14sp" />
 
     <!-- Dev only. This was briefly in the header, on the argument that it
          decides whether a frame leaves the phone and so is worth reaching for

@@ -1,9 +1,14 @@
 package com.tactilesight.frame
 
 /**
- * Where frames come from. WebRTC is listed but disabled — it is visible so the
- * demo path is legible, and disabled because #19 has not built it yet. Showing
- * it greyed is more honest than hiding it.
+ * Where frames come from.
+ *
+ * The live band entry was `WEBRTC` while it was unbuilt, because ADR-0009
+ * expected a WebRTC data channel. The board that shipped does not serve one: it
+ * broadcasts a JSON bundle over a plain WebSocket (`ws://<board>:8083`) in
+ * response to `POST /capture`. This name follows the wire rather than the plan
+ * — a picker entry reading "WebRTC" for a link carrying no WebRTC is the kind
+ * of small lie that costs an hour when the link misbehaves at a venue.
  */
 enum class FrameSourceKind(
     val displayName: String,
@@ -27,5 +32,14 @@ enum class FrameSourceKind(
      */
     PHONE_CAMERA("Phone camera", available = true, measuresDistance = false),
 
-    WEBRTC("WebRTC from band", available = false, measuresDistance = true),
+    /**
+     * The real band over WiFi — see [BandCaptureSource].
+     *
+     * `measuresDistance` is true because the band carries an Astra Pro, but a
+     * given frame can still arrive without depth if the board's encoder failed.
+     * That is per-frame and handled by `Frame.hasDepth`; this flag answers the
+     * different question of what the *source* is capable of, which is what the
+     * UI has to tell the user before they press.
+     */
+    BAND("Band over WiFi", available = true, measuresDistance = true),
 }

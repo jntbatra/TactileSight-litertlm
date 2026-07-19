@@ -6,6 +6,7 @@ import com.tactilesight.frame.DistanceSpeech
 import com.tactilesight.frame.ObjectDetector
 import com.tactilesight.frame.ObjectDistance
 import com.tactilesight.frame.RegionDistance
+import kotlinx.coroutines.sync.Mutex
 
 /**
  * Press in, speech out. Holds the three seams together and owns exactly one
@@ -13,6 +14,29 @@ import com.tactilesight.frame.RegionDistance
  * with no explanation — is the one outcome a blind user cannot recover from,
  * so capture failure, brain failure and model failure all degrade to a spoken
  * sentence rather than nothing.
+ *
+ * ### One press at a time
+ *
+ * A press occupies the pipeline for seconds — capture, describe, a second pass
+ * to name directions, translation, speech. Nothing used to stop a second press
+ * starting all of that again alongside the first, and the on-device brain holds
+ * **one** model: two overlapping generations reset it out from under each other
+ * and interleave two token streams, which reaches the user as a sentence made
+ * of fragments of two answers. Overlapping server presses are no better — three
+ * translations arrive at once and speak over each other.
+ *
+ * So presses are **dropped, not queued** ([isBusy], [BUSY]). A user pressing
+ * again means "I did not get an answer", not "give me five answers", and a
+ * queue would make them sit through every one. The drop lives here rather than
+ * in the Activity because this is the seam every input goes through — glass,
+ * the volume key, and the band's own buttons when they are wired — and a guard
+ * in the UI would leave the next caller re-entrant. [GenieXBrain] locks its
+ * model as well, as a backstop: silently corrupting an answer is a worse
+ * failure than blocking.
+ *
+ * **A dropped press is not a dead press.** It speaks nothing, deliberately —
+ * see [BUSY]. The caller is expected to give the user a non-speech
+ * acknowledgement instead.
  *
  * Pure logic, no Android framework beyond logging: unit-tested with fakes, no
  * hardware and no model.
@@ -55,22 +79,65 @@ class Orchestrator(
     ) : this(frames = { frames }, brain = { brain }, speech = speech, language = { language })
 
     /**
+     * Held from the moment a press starts answering until its speech has
+     * finished. Non-reentrant on purpose: [onPress] delegates to the *unguarded*
+     * core rather than to [answerAbout], because a second acquire would
+     * deadlock the very press that holds it.
+     */
+    private val answering = Mutex()
+
+    /**
+     * True while a press is being answered — a press started now would be
+     * dropped.
+     *
+     * Advisory, and deliberately so. It exists to let a caller acknowledge the
+     * press *at press-down*, before it has spent a mic recording and a
+     * transcription round trip on an answer that will be discarded. The
+     * authority is still the lock inside [onPress] / [answerAbout]; this only
+     * saves the wasted work in the common case.
+     */
+    val isBusy: Boolean get() = answering.isLocked
+
+    /**
      * Handle one press. Returns what was spoken, so callers (and tests) can see
      * the outcome. Never throws for capture or brain failure.
+     *
+     * Returns [BUSY] without speaking or capturing if another press is still in
+     * flight.
      *
      * @throws Exception only if speech itself fails — with no offline TTS in the
      * MVP (ADR-0012) there is nothing left to degrade to, and swallowing it
      * would hide a silent app behind a green log line.
      */
     suspend fun onPress(question: String? = null): String {
-        val frame = try {
-            frames().capture()
-        } catch (e: Exception) {
-            Log.w(TAG, "capture failed", e)
-            speech.speak(FALLBACK, language())
-            return FALLBACK
+        if (!answering.tryLock()) return dropped()
+        try {
+            val frame = try {
+                frames().capture()
+            } catch (e: CaptureUnavailable) {
+                // A failure the source could name. Speaking its own words keeps
+                // the promise that every press yields speech while telling the
+                // user something they can act on — see CaptureUnavailable.
+                Log.w(TAG, "capture unavailable: ${e.message}", e)
+                speech.speak(e.spokenMessage, language())
+                return e.spokenMessage
+            } catch (e: Exception) {
+                Log.w(TAG, "capture failed", e)
+                speech.speak(FALLBACK, language())
+                return FALLBACK
+            }
+            return answer(frame, question)
+        } finally {
+            answering.unlock()
         }
-        return answerAbout(frame, question)
+    }
+
+    private fun dropped(): String {
+        // Logged, not spoken. Worth a line because "the app ignored me" and
+        // "the app is slow" look identical from outside and this is the only
+        // place they can be told apart.
+        Log.i(TAG, "press dropped — one is already in flight")
+        return BUSY
     }
 
     /**
@@ -116,8 +183,20 @@ class Orchestrator(
      * apology (#11) — someone who held the button and was not understood is
      * better served by hearing what is in front of them than by being told
      * their question failed.
+     *
+     * Returns [BUSY] without speaking if another press is still in flight.
      */
     suspend fun answerAbout(frame: Frame?, question: String? = null): String {
+        if (!answering.tryLock()) return dropped()
+        try {
+            return answer(frame, question)
+        } finally {
+            answering.unlock()
+        }
+    }
+
+    /** The pipeline itself. Callers must already hold [answering]. */
+    private suspend fun answer(frame: Frame?, question: String? = null): String {
         val current = brain()
         val text = if (frame == null) FALLBACK else try {
             // Measure before describing: whether the thing ahead is a flat
@@ -258,5 +337,26 @@ class Orchestrator(
 
         /** Short on purpose — it is heard before every single use. */
         const val READY = "TactileSight is ready."
+
+        /**
+         * Returned by a press that was dropped because one was already running.
+         * **Never spoken**, which is why it is not a sentence.
+         *
+         * Speaking here would be the wrong kind of honest. A press is dropped
+         * precisely when the previous one is still working, so any words would
+         * either talk over the answer the user is listening to, or — worse —
+         * cost a Sarvam round trip to say "please wait" and arrive after the
+         * answer itself. The user's one channel is audio; filling it with
+         * apologies is how they lose the reply they actually asked for.
+         *
+         * That still leaves the case this app cares most about: a press dropped
+         * while the first one is *silently* thinking, where hearing nothing is
+         * indistinguishable from the device being broken — the same trap
+         * [speakReady] exists to avoid. The answer is feedback that is not
+         * speech: the caller gives a short tone and a haptic tick, which is
+         * instant, cannot collide with the spoken answer, and means "heard you,
+         * still working". See MainActivity.signalBusy.
+         */
+        const val BUSY = "__busy__"
     }
 }

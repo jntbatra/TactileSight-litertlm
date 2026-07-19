@@ -84,6 +84,25 @@ class GenieXBrain(
 
     private val loadLock = Mutex()
 
+    /**
+     * One generation at a time, because there is one model.
+     *
+     * [describeWith] calls `reset()` before every generation and accumulates
+     * tokens into a local buffer. Two callers overlapping therefore reset the
+     * model out from under an in-flight decode and interleave two token streams
+     * — the user hears a sentence assembled from fragments of two answers,
+     * stray symbols and digits included. That happened: two quick presses on
+     * volume-up were enough.
+     *
+     * The Orchestrator already drops a second press, so in practice this never
+     * contends. It is here anyway because *silently corrupted output is a worse
+     * failure than a blocked call*: a caller that gets here concurrently should
+     * wait and get a correct answer, not get a plausible-sounding wrong one.
+     * Anything reaching the model directly — the prompt sweep, a benchmark, the
+     * band's buttons when they land — is covered without having to remember.
+     */
+    private val generating = Mutex()
+
     @Volatile
     private var vlm: VlmWrapper? = null
 
@@ -169,8 +188,18 @@ class GenieXBrain(
      * far been justified by anecdote. This is the seam that lets two variants
      * run over the same captures and be scored.
      */
-    suspend fun describeWith(frame: Frame, prompt: String, stream: Boolean = false): Answer {
-        val model = load()
+    suspend fun describeWith(frame: Frame, prompt: String, stream: Boolean = false): Answer =
+        // Loaded outside the lock: a queued caller must not sit through a
+        // 30-60 s cold load while holding the one thing every other caller
+        // wants, and load() is idempotent under its own lock anyway.
+        load().let { model -> generating.withLock { generate(model, frame, prompt, stream) } }
+
+    private suspend fun generate(
+        model: VlmWrapper,
+        frame: Frame,
+        prompt: String,
+        stream: Boolean,
+    ): Answer {
 
         // Every press is a fresh look at the world, not the next turn of a
         // conversation. Without this the pipeline can carry state between

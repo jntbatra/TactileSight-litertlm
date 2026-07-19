@@ -35,6 +35,20 @@ class Settings(context: Context) {
         get() = prefs.getBoolean(KEY_PRIVATE_OPENAI, false)
         set(value) = prefs.edit().putBoolean(KEY_PRIVATE_OPENAI, value).apply()
 
+    /**
+     * Where the band is on the network — host or IP, no scheme and no port
+     * (the ports are fixed by the board's contract: 8081 HTTP, 8083 WebSocket).
+     *
+     * Persisted for the same reason the server URL is, only more so: the board
+     * takes its address from DHCP, so it moves whenever the network hands out a
+     * new lease. It has already moved once between the board's own `app.md`
+     * (10.221.208.1) and the board as shipped (10.89.1.1), which is why this is
+     * a setting with a default rather than a constant.
+     */
+    var bandAddress: String
+        get() = prefs.getString(KEY_BAND_ADDRESS, DEFAULT_BAND_ADDRESS).orEmpty()
+        set(value) = prefs.edit().putString(KEY_BAND_ADDRESS, value.trim()).apply()
+
     /** Which model the private server should run, when it is OpenAI-style. */
     var privateServerModel: String
         get() = prefs.getString(KEY_PRIVATE_MODEL, "").orEmpty()
@@ -111,6 +125,10 @@ class Settings(context: Context) {
         const val KEY_PRIVATE_OPENAI = "private_server_is_openai"
         const val KEY_PRIVATE_MODEL = "private_server_model"
         const val KEY_DEV_MODE = "dev_mode"
+        const val KEY_BAND_ADDRESS = "band_address"
+
+        /** The board's current DHCP lease. Overridden the moment it moves. */
+        const val DEFAULT_BAND_ADDRESS = "10.89.1.1"
 
         /** The laptop tier's default port, per server/README. */
         const val DEFAULT_PRIVATE_URL = "http://192.168.1.100:8000"
