@@ -1,9 +1,12 @@
 package com.tactilesight
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.util.Log
+import android.view.MotionEvent
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
@@ -34,6 +37,8 @@ import com.tactilesight.frame.DepthRenderer
 import com.tactilesight.frame.FramePage
 import com.tactilesight.frame.FramePagerAdapter
 import com.tactilesight.frame.FrameSourceKind
+import com.tactilesight.speech.MicRecorder
+import com.tactilesight.speech.SarvamAsr
 import com.tactilesight.speech.SarvamSpeechIO
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -57,6 +62,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var frames: FrameSource
     private lateinit var orchestrator: Orchestrator
+    private val recorder = MicRecorder()
+    private val asr = SarvamAsr()
+
+    /** The scene captured at press-down, answered about at release (#9). */
+    private var heldFrame: Frame? = null
     private val pages = FramePagerAdapter()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -86,6 +96,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.describeButton.setOnClickListener { onPress() }
+        setUpAskButton()
 
         // Dev affordance, not a feature: adb shell am start -n <pkg>/.MainActivity --ez sweep true
         if (intent?.getBooleanExtra(EXTRA_SWEEP, false) == true) runPromptSweep()
@@ -120,6 +131,77 @@ class MainActivity : AppCompatActivity() {
             )
         }
     }
+
+    /**
+     * Hold to ask (#9). Down captures the frame and opens the mic; up closes
+     * it, transcribes, and answers about the frame captured at *down*.
+     *
+     * Why the frame is taken at press-down and not at release: by the time the
+     * question ends, the user may have turned their head, or the person they
+     * were asking about may have walked on. The scene they were asking about
+     * is the one that was in front of them when they decided to ask.
+     *
+     * Nothing is spoken while the mic is open. Text-to-speech into an open
+     * microphone records the device answering itself, and the transcript comes
+     * back as our own last sentence.
+     */
+    private fun setUpAskButton() {
+        binding.askButton.setOnTouchListener { view, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    view.performClick()
+                    startAsking()
+                    true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    finishAsking()
+                    true
+                }
+                else -> false
+            }
+        }
+    }
+
+    private fun startAsking() {
+        if (!hasMicPermission()) {
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQUEST_MIC)
+            binding.status.setText(R.string.status_no_mic)
+            return
+        }
+        // Capture first: the mic can wait a few milliseconds, the scene cannot.
+        heldFrame = null
+        lifecycleScope.launch { heldFrame = orchestrator.captureNow() }
+
+        if (recorder.start()) {
+            binding.status.setText(R.string.status_listening)
+        } else {
+            binding.status.setText(R.string.status_no_mic)
+        }
+    }
+
+    private fun finishAsking() {
+        if (!recorder.isRecording) return
+        val wav = recorder.stop()
+        binding.status.setText(R.string.status_working)
+
+        lifecycleScope.launch {
+            // A hold that produced no usable transcript falls through to a
+            // description rather than an apology (#11): someone who was not
+            // understood is better served by hearing what is in front of them.
+            val question = wav?.let { asr.transcribe(it) }
+            Log.i(TAG, "asked: ${question ?: "(nothing heard — describing instead)"}")
+            try {
+                binding.status.text = orchestrator.answerAbout(heldFrame, question)
+            } catch (e: Exception) {
+                Log.e(TAG, "ask failed", e)
+                binding.status.setText(R.string.status_speech_failed)
+            }
+            heldFrame = null
+        }
+    }
+
+    private fun hasMicPermission(): Boolean =
+        checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
     /**
      * Press the button for real, once per scene, and log what was spoken.
@@ -627,6 +709,7 @@ class MainActivity : AppCompatActivity() {
         const val EXTRA_UNIT = "unit"
         const val EXTRA_COMPARE = "compare"
         const val EXTRA_PRESS = "press"
+        const val REQUEST_MIC = 1001
         const val EXTRA_BUNDLES = "bundles"
         const val EXTRA_SCENES = "scenes"
 

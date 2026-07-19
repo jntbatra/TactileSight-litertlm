@@ -46,9 +46,44 @@ class Orchestrator(
      * would hide a silent app behind a green log line.
      */
     suspend fun onPress(question: String? = null): String {
+        val frame = try {
+            frames.capture()
+        } catch (e: Exception) {
+            Log.w(TAG, "capture failed", e)
+            speech.speak(FALLBACK, language())
+            return FALLBACK
+        }
+        return answerAbout(frame, question)
+    }
+
+    /**
+     * Capture the scene the user is asking about, at the moment they press
+     * down (#9, ADR-0011).
+     *
+     * Separate from [answerAbout] because of *when*, not how: on a hold, the
+     * question is not known until release, and by then the user may have turned
+     * their head or the person they were asking about may have walked on. The
+     * frame must be the one that was in front of them when they decided to ask.
+     */
+    suspend fun captureNow(): Frame? = try {
+        frames.capture()
+    } catch (e: Exception) {
+        Log.w(TAG, "capture failed", e)
+        null
+    }
+
+    /**
+     * Answer about an already-captured [frame], then speak it.
+     *
+     * [question] null means describe. A hold that produced no usable
+     * transcript passes null and therefore gets a description rather than an
+     * apology (#11) — someone who held the button and was not understood is
+     * better served by hearing what is in front of them than by being told
+     * their question failed.
+     */
+    suspend fun answerAbout(frame: Frame?, question: String? = null): String {
         val current = brain()
-        val text = try {
-            val frame = frames.capture()
+        val text = if (frame == null) FALLBACK else try {
             // A blank answer is as dead as a crash — models do return empty
             // strings — so it degrades the same way.
             val described = current.describe(frame, question).spoken.ifBlank {

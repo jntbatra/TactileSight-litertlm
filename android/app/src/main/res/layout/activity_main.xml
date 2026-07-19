@@ -225,4 +225,17 @@
         android:text="@string/describe"
         android:contentDescription="@string/describe_content_description" />
 
+    <!-- The same gesture the band's button 1 carries: press to describe, hold
+         to ask. Two on-screen buttons rather than one long-press, because a
+         long-press on a touchscreen has no edge a finger can feel, and this
+         screen is also how a sighted teammate demonstrates the band. -->
+    <Button
+        android:id="@+id/askButton"
+        style="@style/Widget.TactileSight.PrimaryButton"
+        android:layout_width="match_parent"
+        android:layout_height="72dp"
+        android:layout_marginTop="12dp"
+        android:text="@string/ask"
+        android:contentDescription="@string/ask_content_description" />
+
 </LinearLayout>

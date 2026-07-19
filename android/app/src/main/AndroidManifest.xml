@@ -11,6 +11,10 @@
          which reads as "the server is down" rather than "the app is not
          allowed". A release build should narrow this to a networkSecurityConfig
          listing only the addresses it needs. -->
+    <!-- Hold-to-ask (#9). Requested at the moment of the first hold rather
+         than at launch, so the prompt arrives when its purpose is obvious. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
     <application
         android:usesCleartextTraffic="true"
         android:name=".TactileSightApp"

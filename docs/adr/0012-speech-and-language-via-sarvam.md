@@ -19,6 +19,42 @@ Two things changed:
 3. **Sarvam TTS** speaks it.
 4. **Query:** **Sarvam ASR** transcribes the spoken question → English → VLM.
 
+> ### Measured 2026-07-19 — the ASR half, and why it is one call rather than two
+>
+> Probed the same way as the TTS side (send an invalid value, read the validation error):
+>
+> ```bash
+> curl -s -X POST https://api.sarvam.ai/speech-to-text \
+>   -H "api-subscription-key: $KEY" -F "model=zzz" -F "file=@probe.wav"
+> ```
+>
+> **Models:** `saarika:v2.5`, `saaras:v3`, `saaras:v3-realtime`, `saarika:v1`, `saarika:v2`. `saarika:flash` is **deprecated** and answers with a redirect notice instead of a transcript — do not ship it.
+>
+> **Languages:** the same 23 as translate, plus **`unknown`**, which auto-detects. That matters more than it sounds — the user does not have to declare what language they are about to speak, so the language picker stays a *speech-out* setting rather than becoming something you must set correctly before you can be understood at all.
+>
+> **Two endpoints, and the second collapses a step:**
+>
+> | endpoint | Hindi speech in | returns |
+> |---|---|---|
+> | `/speech-to-text` | मेरे सामने क्या है? | `मेरे सामने क्या है?` (same language) |
+> | `/speech-to-text-translate` | मेरे सामने क्या है? | **`What is in front of me?`** |
+>
+> **We use `/speech-to-text-translate`.** The VLM works in English, so transcribing to Hindi and then translating Hindi→English is two round trips to reach where the second endpoint lands in one — on a venue network, over a blind user's waiting time.
+>
+> The query path is therefore **not** a mirror of the describe path:
+>
+> ```
+> speech (any language) --/speech-to-text-translate--> English question
+>                                                            |
+>                                                       VLM (English)
+>                                                            |
+>                     user's language <--/translate-- English answer --> TTS
+> ```
+>
+> Verified by round-tripping our own TTS back through ASR: `bulbul:v3` spoke *"Is the door in front of me open?"* and both `saarika:v2.5` and `saaras:v3` returned it **verbatim**; repeated in Hindi at `language_probability: 1.0`.
+>
+> ⚠️ **That is a clean-audio result and should not be quoted as accuracy.** Synthesised speech has no room noise, no distance from the mic and no crosstalk; a hackathon hall has all three. What this proves is that the wiring and the model names are right, not that transcription will hold up at the venue. Re-measure there.
+
 **Languages:** demo path is **Punjabi + Hindi + English**, but **every language Sarvam can actually speak is exposed** in the picker — so a Tamil- or Telugu-speaking judge can switch and converse live. This is nearly free: the VLM always works in English, so **adding a language is a parameter, not an integration**.
 
 > ### ⚠️ Measured against the live API, 2026-07-18 — read before quoting a language count

@@ -19,6 +19,10 @@
 
     <string name="describe">Describe</string>
     <string name="describe_content_description">Describe what is in front of me</string>
+    <string name="ask">Hold to ask</string>
+    <string name="ask_content_description">Hold this button and ask a question about the scene</string>
+    <string name="status_listening">Listening… release to ask</string>
+    <string name="status_no_mic">Microphone permission is needed to ask a question.</string>
 
     <string name="stream_rgb">Colour</string>
     <string name="stream_ir">Infrared</string>
