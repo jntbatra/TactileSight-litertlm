@@ -82,11 +82,10 @@ object RegionDistance {
     }
 
     private fun readingFor(depth: DepthMap, region: Region, x0: Float, x1: Float): Reading {
-        // Vertically, skip the band above the colour frame (depth sees higher
-        // than the camera does, DepthCoverage.DEPTH) and the floor immediately
-        // underfoot, which is always the nearest surface and never the answer
-        // to "what is ahead of me".
-        val top = (depth.height * DepthCoverage.DEPTH.top).toInt()
+        // Vertically, keep only the band that means "ahead of me". Both edges
+        // are cut for the same reason and neither is the FOV crop — this is
+        // about what counts as an obstacle, not about matching the previews.
+        val top = (depth.height * CEILING_HORIZON).toInt()
         val bottom = (depth.height * FLOOR_HORIZON).toInt().coerceAtMost(depth.height)
         val left = (depth.width * x0).toInt()
         val right = (depth.width * x1).toInt().coerceAtMost(depth.width)
@@ -112,6 +111,23 @@ object RegionDistance {
         val index = ((valid.size - 1) * NEAREST_PERCENTILE).toInt()
         return Reading(region, millimetres = valid[index], validFraction = fraction)
     }
+
+    /**
+     * Where the ceiling stops being mistaken for something ahead.
+     *
+     * **This was a real bug, and it read as plausible.** Without it, the empty
+     * alcove (id011) was spoken as "about three metres ahead" while the wall
+     * ahead is 5.3 m away — because the top of the frame is *ceiling*, two or
+     * three metres above your head, and a low percentile finds it first. Every
+     * corridor would have understated the distance to whatever is actually in
+     * front of you, and nothing about the answer would have sounded wrong.
+     *
+     * 0.25 was chosen by measurement, not taste: it corrects id011 from 3.2 m
+     * to 5.1 m and leaves every other capture's number **unchanged**. Cutting
+     * further (0.40+) starts pulling in floor and drags id003 and id005 down,
+     * which is the same error in the other direction.
+     */
+    private const val CEILING_HORIZON = 0.25f
 
     /**
      * Where the floor stops being useful. Below this the sensor is looking at

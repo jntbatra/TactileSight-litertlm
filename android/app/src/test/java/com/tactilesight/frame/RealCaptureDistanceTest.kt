@@ -78,6 +78,16 @@ class RealCaptureDistanceTest {
 
         // Looking at the photo: the right wall is closer than the far end.
         check(right < ahead) { "right wall $right mm should be nearer than the end $ahead mm" }
+
+        // The end of the corridor is 5.3 m away, measured off the back wall
+        // directly (192 px, sd 58 mm). Pinned because this scene caught the
+        // ceiling bug: the band used to start at the top of the frame, found
+        // the ceiling two metres overhead, and called it "three metres ahead"
+        // - an understatement that sounded entirely reasonable.
+        check(ahead in 4_500..6_000) {
+            "corridor end read $ahead mm; the back wall is 5300 mm. " +
+                "A number well under that means the vertical band is finding ceiling again."
+        }
         println("id011 -> ${spokenFor("scene_1_id011")}")
     }
 

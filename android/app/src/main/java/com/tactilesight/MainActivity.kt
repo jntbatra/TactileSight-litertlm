@@ -97,6 +97,17 @@ class MainActivity : AppCompatActivity() {
             runHexagonProbe(intent?.getStringExtra(EXTRA_UNIT) ?: "npu")
         }
 
+        // adb shell am start -n <pkg>/.MainActivity --ez press true [--ei scenes N]
+        //
+        // Drives real presses through the Orchestrator, which is the only way
+        // to hear what the user hears. The compare hook calls the brain
+        // directly, so it never exercises the depth-fused distance clause or
+        // Sarvam - a distance bug would pass every check compare can make.
+        // This speaks aloud on purpose: it is the end-to-end path, not a probe.
+        if (intent?.getBooleanExtra(EXTRA_PRESS, false) == true) {
+            runPressSweep(intent?.getIntExtra(EXTRA_SCENES, 3) ?: 3)
+        }
+
         // adb shell am start -n <pkg>/.MainActivity --ez compare true
         // --es bundles geniex,geniex-4b   --ei scenes 3
         // Runs every named QAIRT bundle over the same scenes so model choice is
@@ -107,6 +118,38 @@ class MainActivity : AppCompatActivity() {
                     .split(",").map { it.trim() }.filter { it.isNotEmpty() },
                 scenes = intent?.getIntExtra(EXTRA_SCENES, 3) ?: 3,
             )
+        }
+    }
+
+    /**
+     * Press the button for real, once per scene, and log what was spoken.
+     *
+     * Everything the user experiences runs here and nowhere else: capture,
+     * describe, the measured distance clause, translation and speech. Each
+     * press is timed end to end, because the distance work reads ~300k depth
+     * pixels and the claim that this is free next to the VLM should be a number
+     * rather than an assumption.
+     */
+    private fun runPressSweep(scenes: Int) {
+        val browsable = frames as? BrowsableFrameSource ?: return
+        binding.status.text = getString(R.string.status_working)
+
+        lifecycleScope.launch {
+            delay(SETTLE_BEFORE_SWEEP_MS)
+            for ((index, id) in browsable.sceneIds.take(scenes).withIndex()) {
+                // Drive the real selection, so capture() returns this scene -
+                // onPress() must be reached exactly as a button press reaches it.
+                browsable.selectedIndex = index
+                val startedAt = System.currentTimeMillis()
+                try {
+                    val spoken = orchestrator.onPress()
+                    Log.i(TAG, "press[$id] ${System.currentTimeMillis() - startedAt}ms: $spoken")
+                } catch (e: Exception) {
+                    Log.e(TAG, "press[$id] FAILED", e)
+                }
+            }
+            Log.i(TAG, "press sweep: done")
+            binding.status.text = "Press sweep done — see logcat"
         }
     }
 
@@ -583,6 +626,7 @@ class MainActivity : AppCompatActivity() {
         const val EXTRA_HEXAGON = "hexagon"
         const val EXTRA_UNIT = "unit"
         const val EXTRA_COMPARE = "compare"
+        const val EXTRA_PRESS = "press"
         const val EXTRA_BUNDLES = "bundles"
         const val EXTRA_SCENES = "scenes"
 
