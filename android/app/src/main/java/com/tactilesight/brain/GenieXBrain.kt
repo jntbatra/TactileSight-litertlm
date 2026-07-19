@@ -118,9 +118,32 @@ class GenieXBrain(
     /** True once the model is mapped and a press will not have to wait. */
     val isLoaded: Boolean get() = vlm != null
 
+    /**
+     * The sentence as it is being written, for a screen that wants to show it.
+     *
+     * The model already decodes token by token — this only surfaces what was
+     * being thrown away. Worth having because a press spends seconds in the
+     * model and then seconds more in translation and speech, and a screen that
+     * says "Looking…" for twenty seconds is indistinguishable from one that has
+     * hung. Watching the sentence appear is the difference between waiting and
+     * wondering.
+     *
+     * Sighted-only, and deliberately so: the spoken answer still arrives whole,
+     * at the end. Speaking half-formed clauses as they decode would be worse
+     * than silence for the user this is built for.
+     *
+     * Called on the decoding thread. Whoever sets this owns getting to the UI.
+     */
+    @Volatile
+    var onPartial: ((String) -> Unit)? = null
+
     override suspend fun describe(frame: Frame, question: String?, surfaceIsFlat: Boolean): Answer {
         val base = promptOverride()?.takeIf { it.isNotBlank() } ?: VlmPrompt.forRequest(question)
-        return describeWith(frame, if (surfaceIsFlat) VlmPrompt.withFlatSurface(base) else base)
+        return describeWith(
+            frame,
+            if (surfaceIsFlat) VlmPrompt.withFlatSurface(base) else base,
+            stream = true,
+        )
     }
 
     /**
@@ -143,7 +166,7 @@ class GenieXBrain(
      * far been justified by anecdote. This is the seam that lets two variants
      * run over the same captures and be scored.
      */
-    suspend fun describeWith(frame: Frame, prompt: String): Answer {
+    suspend fun describeWith(frame: Frame, prompt: String, stream: Boolean = false): Answer {
         val model = load()
 
         // Every press is a fresh look at the world, not the next turn of a
@@ -194,7 +217,15 @@ class GenieXBrain(
             val answer = StringBuilder()
             model.generateStreamFlow(templated.formattedText, configured).collect { result ->
                 when (result) {
-                    is LlmStreamResult.Token -> answer.append(result.text)
+                    is LlmStreamResult.Token -> {
+                        answer.append(result.text)
+                        // Only the description streams to the screen. The
+                        // direction-naming pass runs through here too, and
+                        // spraying "AHEAD=people; LEFT=furniture" across the
+                        // status line would show the user the machinery rather
+                        // than the answer.
+                        if (stream) onPartial?.invoke(answer.toString())
+                    }
                     is LlmStreamResult.Error -> throw result.throwable
                     is LlmStreamResult.Completed -> lastProfile = result.profile.let {
                         Profile(

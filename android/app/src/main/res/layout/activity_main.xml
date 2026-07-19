@@ -84,9 +84,21 @@
             android:textSize="12sp" />
     </LinearLayout>
 
-    <!-- Band or phone. Top of the screen and visible in user mode because it
-         changes what the app can tell you: the band measures distance, the
-         phone only describes. See FrameSourceKind.measuresDistance. -->
+    <!-- Everything a user must never have to see or understand: which engine
+         answers, where it lives, and what it is asked. One container so the
+         switch is a single visibility change and a control cannot be added
+         here and forgotten. -->
+    <LinearLayout
+        android:id="@+id/devPanel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+    <!-- Dev only. User mode does not choose a camera: it uses the band's own
+         live stream, which is the only source a real user has. Bundled
+         captures are a development scaffold and the phone camera is the
+         standalone fallback, and neither is something to put in front of
+         someone who cannot see the spinner they are being asked to set. -->
     <TextView
         android:id="@+id/cameraLabel"
         style="@style/TextAppearance.TactileSight.Label"
@@ -100,17 +112,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
-        android:layout_marginBottom="12dp" />
-
-    <!-- Everything a user must never have to see or understand: which engine
-         answers, where it lives, and what it is asked. One container so the
-         switch is a single visibility change and a control cannot be added
-         here and forgotten. -->
-    <LinearLayout
-        android:id="@+id/devPanel"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical">
+        android:layout_marginBottom="20dp" />
 
     <!-- Dev only. This was briefly in the header, on the argument that it
          decides whether a frame leaves the phone and so is worth reaching for

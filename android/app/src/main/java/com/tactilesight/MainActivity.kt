@@ -129,6 +129,8 @@ class MainActivity : AppCompatActivity() {
             binding.status.setText(R.string.status_no_key)
         }
 
+        streamToScreen()
+
         // Load the model now, not on the first press. Until this lands, the
         // screen used to claim "Ready" while nothing was mapped, and the first
         // press came back "Sorry, I could not see that" - the user had done
@@ -420,6 +422,26 @@ class MainActivity : AppCompatActivity() {
      * own lock, so a press simply waits for the same load this started rather
      * than kicking off a second one.
      */
+    /**
+     * Show the local model's sentence as it is written.
+     *
+     * A press spends seconds inside the model and then seconds more in
+     * translation and speech, and a screen reading "Looking…" for twenty of
+     * them is indistinguishable from one that has hung. This is also the
+     * clearest demonstration that the answer is being generated **on the
+     * phone** — the words appear at decode speed, with no network in the way.
+     *
+     * Only the on-device tier has tokens to show: a server brain returns a
+     * finished sentence, so there is nothing to stream.
+     */
+    private fun streamToScreen() {
+        val brain = (application as TactileSightApp).brain as? GenieXBrain ?: return
+        brain.onPartial = { partial ->
+            // Arrives on the decoding thread; the TextView is not thread-safe.
+            runOnUiThread { binding.status.text = partial }
+        }
+    }
+
     private fun warmUpModel() {
         val app = application as TactileSightApp
         binding.status.setText(R.string.model_loading)
@@ -566,6 +588,11 @@ class MainActivity : AppCompatActivity() {
             if (requested.sendsImageryOffDevice && app.settings.urlFor(requested).isBlank()) {
                 toast(getString(R.string.endpoint_missing))
             }
+            // A new brain is a new object, so the token listener has to be
+            // re-attached - otherwise switching engines silently stops the
+            // sentence appearing and looks like the streaming broke.
+            streamToScreen()
+            warmUpModel()
             showBrain()
         }
 
@@ -681,6 +708,7 @@ class MainActivity : AppCompatActivity() {
             if (dev) R.string.mode_on_content_description
             else R.string.mode_off_content_description,
         )
+        if (!dev) preferLiveBand()
         binding.subtitle.setText(if (dev) R.string.subtitle else R.string.subtitle_user)
     }
 
@@ -787,6 +815,30 @@ class MainActivity : AppCompatActivity() {
             }
             selectSource(kind)
         }
+    }
+
+    /**
+     * User mode does not pick a camera — it uses the band.
+     *
+     * The band's live stream is the only source a real user has: bundled
+     * captures are a development scaffold and the phone camera is the
+     * standalone fallback. So entering user mode selects the live source rather
+     * than leaving the choice on screen.
+     *
+     * Until #19 lands that source does not exist, and this deliberately does
+     * **not** pretend otherwise. It leaves whatever dev mode had selected and
+     * says so in the log, rather than silently dressing bundled captures up as
+     * a live band — which would make a demo look live when it was replaying a
+     * photograph from yesterday.
+     */
+    private fun preferLiveBand() {
+        val live = FrameSourceKind.WEBRTC
+        if (!live.available) {
+            Log.i(TAG, "user mode: ${live.displayName} not built yet — staying on the selected source")
+            return
+        }
+        binding.cameraSpinner.setSelection(live.ordinal)
+        selectSource(live)
     }
 
     private fun selectSource(kind: FrameSourceKind) {
