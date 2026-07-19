@@ -57,6 +57,8 @@ object BandTag {
      */
     fun startWriting(activity: Activity) {
         val adapter = adapterFor(activity) ?: return
+        // No filters and no tech list: catch every tag, including blank ones
+        // that carry no NDEF message and would match nothing we could declare.
         val intent = Intent(activity, activity.javaClass)
             .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
         val pending = PendingIntent.getActivity(

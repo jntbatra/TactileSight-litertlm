@@ -184,12 +184,14 @@ class MainActivity : AppCompatActivity() {
             }
             armedForTagWrite = true
             BandTag.startWriting(this)
+            Log.i(TAG, "armed for tag write")
             binding.status.setText(R.string.tag_hold)
         }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        Log.i(TAG, "onNewIntent: action=${intent.action} armed=$armedForTagWrite")
         if (!armedForTagWrite) return
         val tag: Tag? = if (android.os.Build.VERSION.SDK_INT >= 33) {
             intent.getParcelableExtra(NfcAdapter.EXTRA_TAG, Tag::class.java)
@@ -204,12 +206,25 @@ class MainActivity : AppCompatActivity() {
         Log.i(TAG, "tag write: $outcome")
     }
 
+    /**
+     * Foreground dispatch has to be re-armed here, not only where the button is
+     * pressed.
+     *
+     * Delivering a tag takes the activity through pause and resume, so dispatch
+     * enabled in a click handler is torn down by the very tap it was waiting
+     * for. The first version also cleared the armed flag in onPause, and the
+     * log said exactly that: `TAG_DISCOVERED armed=false` — the tag arrived and
+     * we had just stopped listening for it.
+     */
+    override fun onResume() {
+        super.onResume()
+        if (armedForTagWrite) BandTag.startWriting(this)
+    }
+
+    /** Android requires dispatch to be disabled here. The flag survives. */
     override fun onPause() {
         super.onPause()
-        if (armedForTagWrite) {
-            armedForTagWrite = false
-            BandTag.stopWriting(this)
-        }
+        BandTag.stopWriting(this)
     }
 
     private fun setUpAskButton() {
